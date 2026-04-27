@@ -4,16 +4,11 @@ From [POC_1_DST_Renderer.md](../../POC_1_DST_Renderer.md), Step 1: build the DST
 
 ## Tasks
 
-1. **Acquire 3 public sample DSTs** — drop into `../../data/sample_dsts/` (gitignored). Need:
-   - simple text-only logo (< 5k stitches)
-   - multi-color logo with fills (10k–20k stitches)
-   - complex detailed design (30k+ stitches)
+1. **Acquire test DSTs** — drop into `../../data/sample_dsts/` (gitignored).
 
-   Sources:
-   - [`pyembroidery` test corpus](https://github.com/EmbroidePy/pyembroidery/tree/main/test/assets)
-   - other public-domain embroidery libraries (record source URL + license in `data/README.md`)
+   **Tier 1 (DONE 2026-04-27):** 3 publicly-licensed (zlib) DSTs from Embroidermodder/Embroidermodder. All under 5k stitches. See [`data/README.md`](../../data/README.md) for filenames, stitch counts, sources, and a one-shot re-fetch script.
 
-   **No Straight Down production DSTs.** This project is source-isolated.
+   **Tier 2 (10k–20k stitches) and Tier 3 (30k+ stitches): DEFERRED.** No public-domain DST corpus exists at these stitch counts (researched 2026-04-27 across Embroidermodder, libembroidery, EmbroidePy/samples, Inkstitch, pyembroidery, p5.embroider, StitchView, stitchcode). Brandon is sourcing larger files from the Straight Down team; they'll land in `data/sample_dsts/` (gitignored) when supplied. Parser work below should not assume any specific Tier 2/3 file exists yet but should be tested against them once they arrive.
 
 2. **Write the parser** (`src/dst_parser.py`) — given a DST file path, return a structured representation of:
    - stitch coordinates (list of `(x, y, command)` tuples or equivalent)
@@ -28,10 +23,10 @@ From [POC_1_DST_Renderer.md](../../POC_1_DST_Renderer.md), Step 1: build the DST
    - bounding box matches `pyembroidery`'s extents
    - round-trip parse → JSON → reparse is stable
 
-5. **Tests** in `tests/test_dst_parser.py` — assert the above against the 3 sample DSTs.
+5. **Tests** in `tests/test_dst_parser.py` — assert the above against the Tier 1 DSTs (and Tier 2/3 once supplied).
 
 ## Definition of done
 
-- `uv run python -m pocs.poc1_dst_renderer.src.dst_parser <path-to-dst>` prints parsed JSON for any of the 3 samples.
+- `uv run python -m pocs.poc1_dst_renderer.src.dst_parser <path-to-dst>` prints parsed JSON for any of the Tier 1 samples.
 - `uv run pytest pocs/poc1_dst_renderer/tests/` passes.
 - `src/SCHEMA.md` documents the JSON shape clearly enough that the next session can start writing renderer A (pyembroidery PNG baseline) or B (Pillow 2D) against it without re-reading the parser code.
