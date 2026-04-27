@@ -37,5 +37,16 @@ tmp/
 # ==== Misc ====
 *.log
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
+
+# ==== Data — public samples & Madeira sources stay out of git ====
+data/sample_dsts/*
+!data/sample_dsts/.gitkeep
+data/madeira_sources/*
+!data/madeira_sources/.gitkeep
+
+# ==== POC outputs (rendered images, scorecards, generated catalogue) ====
+outputs/*
+!outputs/.gitkeep
