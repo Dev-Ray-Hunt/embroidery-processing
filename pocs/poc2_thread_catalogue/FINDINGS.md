@@ -4,7 +4,26 @@
 
 ## What we built
 
-_TBD_ — catalogue (size, lines covered, source mix), matching algorithms implemented (A–D), palette strategies implemented (A–C), validation UI.
+**Step 1 (2026-06-11): the catalogue.** 823 threads — 391 Classic Rayon 40 + 432
+Polyneon 40 — built by `src/catalogue.py` from six independent sources
+(Madeira's own 2023 shade-card PDFs, Madeira USA's official name lists,
+Ink/Stitch's GPL palettes, EZ Stitch's RGB chart, CIA Inc.'s chart), merged
+under a documented priority rule (official Madeira swatch colors win; see
+`src/SCHEMA.md`). Exceeds the ≥200 pass bar 4×.
+
+- 51 entries (6%) conflict-flagged where non-reference sources disagree by
+  ΔE76 > 18 — these are the priority queue for spool validation.
+- Coverage vs official name lists: Polyneon 406/409 named colors have RGB;
+  Classic 377/377 named colors have RGB (217 of them backed by Madeira's own
+  published swatch colors, the rest by Ink/Stitch only).
+- Notable data findings: Classic Rayon 40 catalog numbers span exactly
+  1000–1499 and Polyneon 1500–1999/2000s — no overlap, which makes line
+  membership unambiguous. EZ Stitch's "classic_40" chart is actually
+  Polyneon (its own title page says so). The Madeira Metro chart appears to
+  exist only as a physical card.
+
+Matching algorithms (A–D), palette strategies, validation UI: **not started**
+(Step 2 — see NEXT.md).
 
 ## What we measured
 

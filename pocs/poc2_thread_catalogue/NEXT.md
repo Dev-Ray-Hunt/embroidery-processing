@@ -1,36 +1,44 @@
-# POC 2 — Next Step: Madeira Data Collection & Catalogue Build
+# POC 2 — Next Step: Color Matching Engine (Step 2)
 
-From [POC_2_Thread_Catalogue.md](../../POC_2_Thread_Catalogue.md). Catalogue first; matching algorithms come once the data is solid.
+Step 1 (catalogue build) is **done** — 823 threads (391 Classic Rayon 40 +
+432 Polyneon 40) from 6 reconciled sources. Build it any time:
 
-## Tasks
+```bash
+uv run python -m pocs.poc2_thread_catalogue.src.catalogue
+# -> outputs/poc2/madeira_catalogue.json   (schema: src/SCHEMA.md)
+```
 
-1. **Identify and download non-Wilcom Madeira sources** into `../../data/madeira_sources/` (gitignored):
-   - Madeira Metro chart (RGB + catalog number reference)
-   - EZ Stitch's Madeira data (cross-reference)
-   - Madeira's own digital color chart (PDF or web data)
-   - Isacord RGB PDF as a parallel cross-reference (best-documented thread brand, useful for sanity-checking method)
+Sources, provenance and the re-fetch script live in `data/README.md`.
+51 entries are conflict-flagged (sources disagree, ΔE76 > 18) — they are the
+priority list for the physical spool validation (`src/SPOOL_CAPTURE.md`,
+ready for when Brandon is on-site).
 
-   For each source, record source URL, retrieval date, and license/usage status in `data/README.md` at repo root.
+## Step 2 tasks (from POC_2_Thread_Catalogue.md)
 
-2. **Parse each source** into a normalized intermediate (CSV or JSON) with: catalog number, color name, RGB, line/family, source.
+1. **Matching algorithms bake-off** — implement all four:
+   - A: CIEDE2000 (`colour-science` has `colour.difference.delta_E_CIE2000`)
+   - B: CIE76 (Euclidean in Lab — already in `catalogue.delta_e76`)
+   - C: Euclidean in RGB (the floor)
+   - D: CMC l:c 2:1 (textile standard; `colour` implements it)
+2. **`find_closest_threads(color, top_n, algorithm, line=None)`** over the
+   catalogue; accept RGB tuples and hex.
+3. **`match_palette(design_colors, ...)`** with the three strategies
+   (greedy / constrained-N / perceptual clustering).
+4. **Unit tests** with known color pairs (published CIEDE2000 test vectors
+   exist — Sharma et al. 2005 dataset) + ranking sanity checks.
+5. **Measurements**: 50-random-color Delta-E distribution per algorithm,
+   algorithm agreement rate, matching speed (<200ms bar is for search).
 
-3. **Merge & reconcile** — flag conflicts (same catalog # → different RGB across sources) and decide a resolution rule (e.g., majority-vote, prefer Madeira-official). Document the rule.
+## Step 3 preview (after Step 2)
 
-4. **Convert RGB → CIELAB** under D65 illuminant. Use a well-tested library (e.g., `colour-science` — add it to `pyproject.toml` when this task starts).
+Validation web UI — color picker → top-5 swatches with ΔE per algorithm.
+Note the Stitch Proofer (webapp/) is the natural future home: its per-block
+color pickers should eventually offer "nearest Madeira threads" from this
+catalogue.
 
-5. **Assign color families** — automated (e.g., HSL hue bucketing) or manual review. Family taxonomy should be coarse enough for editor browse-by-family (red/orange/yellow/green/blue/purple/pink/brown/neutral/black/white/metallic).
+## Blocked on external input
 
-6. **Emit `madeira_catalogue.json`** to `outputs/poc2/madeira_catalogue.json` with the agreed schema. Target ≥ 200 entries covering Classic Rayon 40 + Polyneon.
-
-7. **Spool photo validation** — defer the on-site task. Document the capture protocol in `src/SPOOL_CAPTURE.md` (lighting, white-balance reference, distance, file naming) so it's ready when Brandon can do it in person. Photos go to `data/madeira_sources/spool_photos/` when captured.
-
-## Definition of done
-
-- `outputs/poc2/madeira_catalogue.json` exists with ≥ 200 entries, each with `catalog_number`, `name`, `rgb`, `lab`, `family`, `line`, `source`.
-- Schema is documented in `src/SCHEMA.md`.
-- `uv run pytest pocs/poc2_thread_catalogue/tests/` passes (smoke tests: schema validity, no duplicate catalog #s, all RGB values in [0, 255], LAB conversion round-trip within tolerance).
-- Spool capture protocol written and ready.
-
-## Parallelism note
-
-This work has zero dependencies on POC 1. Run alongside POC 1 Step 1 in separate sessions.
+- Spool photos (10 spools, protocol written) — needs Brandon on-site.
+- Isacord↔Madeira equivalence list for the Task 2 cross-check — the Isacord
+  RGB palette is downloaded; an equivalence table (which Isacord ≈ which
+  Madeira) still needs a source.

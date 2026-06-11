@@ -49,12 +49,37 @@ curl -sfL -o shamrockin.dst       https://raw.githubusercontent.com/Embroidermod
 
 ## madeira_sources/ — Madeira (and Isacord cross-ref) chart data for POC 2
 
-When populating, record each file here:
+All retrieved 2026-06-11. Used for internal R&D color reference only — none of these files or values are redistributed.
 
-| Filename | Source URL | Format | Retrieved | License | Notes |
-|----------|-----------|--------|-----------|---------|-------|
-| | | | | | |
+| Filename | Source URL | Format | License/status | Notes |
+|----------|-----------|--------|----------------|-------|
+| `madeira_official_colour_cards.pdf` | https://www.madeira.com/fileadmin/user_upload/Downloads/Shade_Cards/Colour_Cards.pdf | PDF (vector+JPEG) | Madeira public download | 2023 multi-line shade cards; CLASSIC 40 index parsed |
+| `madeira_official_polyneon.pdf` | https://www.madeira.com/fileadmin/user_upload/Downloads/Shade_Cards/MADEIRA_POLYNEON.pdf | PDF (vector) | Madeira public download | Dedicated Polyneon card, 18 panels/page |
+| `madeirausa_classic_names.pdf` | https://www.madeirausa.com/_resources/common/userfiles/file/Resources/Madeira%20Color%20names/Classic%20ColorNames2015.pdf | PDF (text) | Madeira USA public download | Official Classic names (377) |
+| `madeirausa_polyneon_names.pdf` | https://www.madeirausa.com/_resources/common/userfiles/file/Resources/Madeira%20Color%20names/Polyneon%20ColorNames2015.pdf | PDF (text) | Madeira USA public download | Official Polyneon names (409) |
+| `inkstitch_madeira_rayon.gpl` | https://raw.githubusercontent.com/inkstitch/inkstitch/main/palettes/InkStitch%20Madeira%20Rayon.gpl | GIMP palette | GPL (Ink/Stitch) | Full Classic 1000-1499 RGB+names |
+| `inkstitch_madeira_polyneon.gpl` | https://raw.githubusercontent.com/inkstitch/inkstitch/main/palettes/InkStitch%20Madeira%20Polyneon.gpl | GIMP palette | GPL (Ink/Stitch) | Polyneon RGB+names |
+| `inkstitch_isacord.gpl` | https://raw.githubusercontent.com/inkstitch/inkstitch/main/palettes/InkStitch%20Isacord%20Polyester.gpl | GIMP palette | GPL (Ink/Stitch) | Isacord cross-reference (POC 2 Task 2) |
+| `ezstitch_madeira_classic_40.pdf` | https://ezstitchdigitizing.com/madeira_classic_40_colors.pdf | PDF (text) | Public download, no license stated | Despite the filename: Polyneon 40 (per its own title page + 1500-1999 range) |
+| `ciainc_polyneon.pdf` | https://www.ciainc.com/pdf/POLYNEON%20THREAD%20CHART.pdf | PDF (vector, CMYK) | Public download, no license stated | Cross-reference only (CMYK, no ICC) |
+| `madeirausa_classic_ecard.pdf` / `corporatecasuals_classic40.pdf` | madeirausa.com / corporatecasuals.com | PDF | Public download | Identical files; CID-garbled text — NOT parsed |
+| `dakota_alphabetical.pdf`, `dakota_numerical.pdf` | dakotacollectibles.com | PDF (text) | Public download | Cross-reference lists, no RGB — NOT parsed |
 
-Acceptable sources: Madeira's own published charts (web/PDF), EZ Stitch's Madeira data, the Madeira Metro chart, the Isacord PDF (cross-reference only). **Not acceptable:** anything pulled from a Wilcom thread-database export.
+One-shot re-fetch of everything that's parsed:
 
-`madeira_sources/spool_photos/` will hold physical-spool validation photos when captured. Capture protocol lives at `pocs/poc2_thread_catalogue/src/SPOOL_CAPTURE.md` (to be written when POC 2 starts).
+```bash
+cd data/madeira_sources/
+curl -sfL -o madeira_official_colour_cards.pdf "https://www.madeira.com/fileadmin/user_upload/Downloads/Shade_Cards/Colour_Cards.pdf"
+curl -sfL -o madeira_official_polyneon.pdf "https://www.madeira.com/fileadmin/user_upload/Downloads/Shade_Cards/MADEIRA_POLYNEON.pdf"
+curl -sfL -o madeirausa_classic_names.pdf "https://www.madeirausa.com/_resources/common/userfiles/file/Resources/Madeira%20Color%20names/Classic%20ColorNames2015.pdf"
+curl -sfL -o madeirausa_polyneon_names.pdf "https://www.madeirausa.com/_resources/common/userfiles/file/Resources/Madeira%20Color%20names/Polyneon%20ColorNames2015.pdf"
+curl -sfL -o inkstitch_madeira_rayon.gpl "https://raw.githubusercontent.com/inkstitch/inkstitch/main/palettes/InkStitch%20Madeira%20Rayon.gpl"
+curl -sfL -o inkstitch_madeira_polyneon.gpl "https://raw.githubusercontent.com/inkstitch/inkstitch/main/palettes/InkStitch%20Madeira%20Polyneon.gpl"
+curl -sfL -o inkstitch_isacord.gpl "https://raw.githubusercontent.com/inkstitch/inkstitch/main/palettes/InkStitch%20Isacord%20Polyester.gpl"
+curl -sfL -o ezstitch_madeira_classic_40.pdf "https://ezstitchdigitizing.com/madeira_classic_40_colors.pdf"
+curl -sfL -o ciainc_polyneon.pdf "https://www.ciainc.com/pdf/POLYNEON%20THREAD%20CHART.pdf"
+```
+
+The Madeira Metro chart was not found in a parseable digital form (only physical cards for sale); the Ink/Stitch palettes fill that role.
+
+`madeira_sources/spool_photos/` will hold physical-spool validation photos when captured. Capture protocol: `pocs/poc2_thread_catalogue/src/SPOOL_CAPTURE.md`.
