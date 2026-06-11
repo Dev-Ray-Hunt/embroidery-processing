@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>POC 1 — DST Renderer Bake-off</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>POC 1 — DST Renderer Bake-off</h1>
+      <p>
+        Pick a DST. Each panel runs one of the bake-off renderers against it. Only renderer A is
+        wired up so far; B–E are placeholders until those land.
+      </p>
+    </header>
+
+    <main>
+      <aside id="dst-list">
+        <h2>DST files</h2>
+        <p class="hint">From <code>data/sample_dsts/</code></p>
+        <ul id="dst-items">
+          <li class="loading">Loading…</li>
+        </ul>
+      </aside>
+
+      <section id="renderers">
+        <div id="grid">
+          <p class="loading">Loading renderers…</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
