@@ -185,29 +185,40 @@ def live_server():
 
 
 @pytest.fixture(scope="session")
-def browser_page(live_server):
+def pw():
+    """The ONE sync Playwright instance for the whole test session.
+
+    Two test modules each starting their own sync_playwright() collide (the
+    sync API allows a single instance per thread), so every browser fixture
+    must launch from this shared instance.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        pytest.skip("playwright not installed")
+    p = sync_playwright().start()
+    yield p
+    p.stop()
+
+
+@pytest.fixture(scope="session")
+def browser_page(pw, live_server):
     """A Chromium page on the live server, software-WebGL enabled.
 
     Skips (not fails) if Playwright's chromium isn't installed, so the rest
     of the suite stays runnable on machines without browsers.
     """
     try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        pytest.skip("playwright not installed")
-
-    with sync_playwright() as p:
-        try:
-            browser = p.chromium.launch(args=["--enable-unsafe-swiftshader"])
-        except Exception as e:  # noqa: BLE001
-            pytest.skip(f"chromium unavailable: {e}")
-        page = browser.new_page(viewport={"width": 1600, "height": 1200}, device_scale_factor=2)
-        errors: list[str] = []
-        page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
-        page.on(
-            "console",
-            lambda m: errors.append(f"console.error: {m.text}") if m.type == "error" else None,
-        )
-        page.js_errors = errors  # type: ignore[attr-defined]
-        yield page
-        browser.close()
+        browser = pw.chromium.launch(args=["--enable-unsafe-swiftshader"])
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"chromium unavailable: {e}")
+    page = browser.new_page(viewport={"width": 1600, "height": 1200}, device_scale_factor=2)
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+    page.on(
+        "console",
+        lambda m: errors.append(f"console.error: {m.text}") if m.type == "error" else None,
+    )
+    page.js_errors = errors  # type: ignore[attr-defined]
+    yield page
+    browser.close()

@@ -41,24 +41,22 @@ _ids = [p.name for p in DST_FILES]
 
 
 @pytest.fixture(scope="module")
-def proofer_page():
+def proofer_page(pw):
+    # Launched from the session-shared Playwright instance (see conftest.pw) —
+    # a second sync_playwright() in the same thread would collide with the
+    # bake-off UI tests' browser.
     try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        pytest.skip("playwright not installed")
-    with sync_playwright() as p:
-        try:
-            # SwiftShader: the 2.5D mode needs WebGL2 in headless Chromium.
-            browser = p.chromium.launch(args=["--enable-unsafe-swiftshader"])
-        except Exception as e:  # noqa: BLE001
-            pytest.skip(f"chromium unavailable: {e}")
-        page = browser.new_page(viewport={"width": 1400, "height": 1000})
-        errors: list[str] = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        page.js_errors = errors  # type: ignore[attr-defined]
-        page.goto(PROOFER_URL)
-        yield page
-        browser.close()
+        # SwiftShader: the 2.5D mode needs WebGL2 in headless Chromium.
+        browser = pw.chromium.launch(args=["--enable-unsafe-swiftshader"])
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"chromium unavailable: {e}")
+    page = browser.new_page(viewport={"width": 1400, "height": 1000})
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.js_errors = errors  # type: ignore[attr-defined]
+    page.goto(PROOFER_URL)
+    yield page
+    browser.close()
 
 
 def _load(page, dst_path) -> None:
