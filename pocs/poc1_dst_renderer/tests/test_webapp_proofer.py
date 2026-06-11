@@ -48,7 +48,8 @@ def proofer_page():
         pytest.skip("playwright not installed")
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch()
+            # SwiftShader: the 2.5D mode needs WebGL2 in headless Chromium.
+            browser = p.chromium.launch(args=["--enable-unsafe-swiftshader"])
         except Exception as e:  # noqa: BLE001
             pytest.skip(f"chromium unavailable: {e}")
         page = browser.new_page(viewport={"width": 1400, "height": 1000})
@@ -67,7 +68,14 @@ def _load(page, dst_path) -> None:
 
 
 def _canvas_shot(page) -> Image.Image:
-    return Image.open(io.BytesIO(page.locator("#stage").screenshot())).convert("RGB")
+    # Shoot the viewport, not a specific canvas: the 2.5D mode swaps in a
+    # separate WebGL canvas, and the viewport always shows whichever is live.
+    return Image.open(io.BytesIO(page.locator("#viewport").screenshot())).convert("RGB")
+
+
+def _set_mode(page, mode: str) -> None:
+    page.locator(f'#renderer-row button[data-mode="{mode}"]').click()
+    page.wait_for_timeout(200)
 
 
 # --------------------------- 1. Parser parity --------------------------------
@@ -207,6 +215,60 @@ def test_fabric_switch_changes_background(proofer_page):
     corner = img.load()[6, 6]
     assert color_distance(corner, (35, 47, 75)) < 30, f"corner {corner} is not navy"
     proofer_page.locator('#fabric-row button[data-fabric="white"]').click()
+
+
+def test_all_four_renderer_modes_paint_ink(proofer_page):
+    """Every bake-off style must produce a real render, and the styles must
+    agree on geometry: each mode's ink mask vs flat-mode IoU over a floor."""
+    from pocs.poc1_dst_renderer.tests.conftest import mask_iou, normalized_mask
+
+    multi = next((p for p in DST_FILES if p.name == "000021273.DST"), DST_FILES[0])
+    _load(proofer_page, multi)
+    masks = {}
+    for mode in ("flat", "shaded", "soft", "lit"):
+        _set_mode(proofer_page, mode)
+        img = _canvas_shot(proofer_page)
+        mask = ink_mask(img.resize((300, 300)), WHITE)
+        assert ink_fraction(mask) > 0.01, f"mode {mode} painted (nearly) nothing"
+        masks[mode] = normalized_mask(mask)
+    for mode in ("shaded", "soft", "lit"):
+        iou = mask_iou(masks["flat"], masks[mode])
+        floor = 0.40 if mode == "lit" else 0.60
+        assert iou >= floor, f"mode {mode} geometry disagrees with flat (IoU {iou:.3f} < {floor})"
+    _set_mode(proofer_page, "shaded")
+
+
+def test_lit_mode_recolor_and_tilt(proofer_page):
+    """The WebGL path has its own color buffers and camera: recoloring a
+    block and shift-drag tilting must both repaint correctly."""
+    _load(proofer_page, DST_FILES[0])
+    _set_mode(proofer_page, "lit")
+    proofer_page.locator(".block-row input[type=color]").first.fill("#ff00d0")
+    proofer_page.wait_for_timeout(200)
+    img = _canvas_shot(proofer_page)
+    px = img.load()
+    found = any(
+        color_distance(px[x, y], (255, 0, 208)) < 90
+        for y in range(0, img.height, 4)
+        for x in range(0, img.width, 4)
+    )
+    assert found, "picked color never appears in the 2.5D render"
+
+    before = _canvas_shot(proofer_page)
+    box = proofer_page.locator("#viewport").bounding_box()
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    proofer_page.keyboard.down("Shift")
+    proofer_page.mouse.move(cx, cy)
+    proofer_page.mouse.down()
+    proofer_page.mouse.move(cx, cy + 70, steps=4)
+    proofer_page.mouse.up()
+    proofer_page.keyboard.up("Shift")
+    proofer_page.wait_for_timeout(200)
+    after = _canvas_shot(proofer_page)
+    assert list(before.getdata()) != list(after.getdata()), "tilt did not repaint"
+    tilt = proofer_page.evaluate("() => window.__proofer.state.tilt")
+    assert tilt > 0, "tilt state did not change"
+    _set_mode(proofer_page, "shaded")
 
 
 def test_no_js_errors_accumulated(proofer_page):
