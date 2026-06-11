@@ -16,7 +16,12 @@ import pytest
 from pocs.poc1_dst_renderer.src import dst_parser
 
 DST_DIR = Path(__file__).resolve().parents[3] / "data" / "sample_dsts"
-DST_FILES = sorted(DST_DIR.glob("*.dst")) if DST_DIR.exists() else []
+# Case-insensitive: team-supplied files are named .DST.
+DST_FILES = (
+    sorted(p for p in DST_DIR.iterdir() if p.suffix.lower() == ".dst")
+    if DST_DIR.exists()
+    else []
+)
 
 pytestmark = pytest.mark.skipif(
     not DST_FILES, reason="no sample DSTs in data/sample_dsts/ (gitignored)"
