@@ -193,6 +193,7 @@ async function renderClientPanel(rendererId, filename) {
   const article = grid.querySelector(`.renderer[data-renderer="${rendererId}"]`);
   if (!article) return;
   const area = article.querySelector('.render-area');
+  delete area.dataset.rendered;
   area.innerHTML = `<span class="placeholder">Rendering…</span>`;
 
   try {

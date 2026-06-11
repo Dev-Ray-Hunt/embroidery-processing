@@ -24,7 +24,8 @@ function buildBlocks(design) {
       prev = [x, y];
     } else if (cmd === 'COLOR_CHANGE') {
       blocks.push([]);
-      prev = [x, y];
+      // Thread is cut at a color change — no connector into the new block.
+      prev = null;
     } else {
       prev = [x, y];
     }

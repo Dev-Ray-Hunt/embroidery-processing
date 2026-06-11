@@ -83,7 +83,9 @@ def layout(design: ParsedDesign, *, max_dim: int = 1000, margin_frac: float = 0.
             prev = pt
         elif cmd == "COLOR_CHANGE":
             blocks.append(ColorBlock(index=len(blocks), segments=[]))
-            prev = pt
+            # The thread is cut at a color change — the next STITCH must not
+            # draw a connector from the old block's last point.
+            prev = None
         else:
             # JUMP / TRIM / STOP / END / anything exotic: move, don't draw.
             prev = pt

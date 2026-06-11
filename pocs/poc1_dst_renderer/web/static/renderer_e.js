@@ -31,7 +31,8 @@ function buildSegments(design) {
       prev = [x, y];
     } else if (cmd === 'COLOR_CHANGE') {
       block += 1;
-      prev = [x, y];
+      // Thread is cut at a color change — no connector into the new block.
+      prev = null;
     } else {
       prev = [x, y];
     }
@@ -57,6 +58,10 @@ export function mount(area, design, fabricHex) {
   area.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
+  // Clear color = fabric: the camera frustum is wider than the fabric plane
+  // when the panel aspect differs from the design's, and the default black
+  // void would show past the plane's edges.
+  scene.background = new THREE.Color(fabricHex);
 
   // Design space: DST +y is down; negate y so the design reads upright.
   const [minX, minY, maxX, maxY] = design.extents;
@@ -65,12 +70,9 @@ export function mount(area, design, fabricHex) {
   const wU = Math.max(maxX - minX, 1);
   const hU = Math.max(maxY - minY, 1);
 
-  // Fabric plane, comfortably larger than the design.
-  const fabricMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(fabricHex),
-    roughness: 0.92,
-    metalness: 0.0,
-  });
+  // Fabric plane, comfortably larger than the design. Unlit, so it matches
+  // the scene background exactly — no seam where the plane ends.
+  const fabricMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(fabricHex) });
   const fabricSize = Math.max(wU, hU) * 1.6;
   const fabric = new THREE.Mesh(new THREE.PlaneGeometry(fabricSize, fabricSize), fabricMat);
   fabric.position.set(cx, cy, 0);
@@ -206,6 +208,7 @@ export function mount(area, design, fabricHex) {
   return {
     setFabric(hex) {
       fabricMat.color.set(hex);
+      scene.background.set(hex);
       render();
     },
     get renderMs() {
