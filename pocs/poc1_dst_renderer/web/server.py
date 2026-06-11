@@ -20,7 +20,29 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from pocs.poc1_dst_renderer.src import dst_parser
-from pocs.poc1_dst_renderer.src.renderers import a_pyembroidery
+from pocs.poc1_dst_renderer.src.renderers import a_pyembroidery, b_pillow, c_cairo
+from shared.design_colors import DEFAULT_FABRIC, FABRICS, block_color, fabric_rgb
+
+
+def _render_a_on_fabric(dst_path: Path, *, fabric: tuple[int, int, int]) -> bytes:
+    """Renderer A composited over a fabric color.
+
+    pyembroidery's PngWriter has no background option (transparent only), so
+    the harness composites — A itself gets no credit for fabric support in the
+    bake-off, but its panel stays comparable to the others.
+    """
+    import io
+
+    from PIL import Image
+
+    raw = a_pyembroidery.render_png(dst_path)
+    img = Image.open(io.BytesIO(raw)).convert("RGBA")
+    bg = Image.new("RGBA", img.size, (*fabric, 255))
+    out = Image.alpha_composite(bg, img).convert("RGB")
+    buf = io.BytesIO()
+    out.save(buf, format="PNG")
+    return buf.getvalue()
+
 
 # Resolve the repo root from this file's location:
 # pocs/poc1_dst_renderer/web/server.py -> ../../../
@@ -37,36 +59,36 @@ RENDERERS: dict[str, dict] = {
         "title": "A. pyembroidery PNG",
         "desc": "Baseline — pyembroidery's built-in PNG writer. Zero custom code.",
         "kind": "server",
-        "impl": a_pyembroidery.render_png,
+        "impl": _render_a_on_fabric,
         "implemented": True,
     },
     "b": {
         "title": "B. Pillow 2D + shading",
         "desc": "Custom Python renderer: thick lines with angle-based brightness shading.",
         "kind": "server",
-        "impl": None,
-        "implemented": False,
+        "impl": b_pillow.render_png,
+        "implemented": True,
     },
     "c": {
         "title": "C. Cairo 2D antialiased",
         "desc": "PyCairo vector renderer with smooth antialiased lines.",
         "kind": "server",
-        "impl": None,
-        "implemented": False,
+        "impl": c_cairo.render_png,
+        "implemented": True,
     },
     "d": {
         "title": "D. HTML5 Canvas (browser)",
-        "desc": "Browser-side canvas with rounded line caps. Interactive zoom/pan.",
+        "desc": "Browser-side canvas, round caps. Zoom/pan + hover highlights a color block.",
         "kind": "client",
         "impl": None,
-        "implemented": False,
+        "implemented": True,
     },
     "e": {
         "title": "E. WebGL/Three.js 2.5D",
-        "desc": "Three.js scene with shaded thread geometry.",
+        "desc": "Instanced 3D thread geometry on a fabric plane. Zoom/pan, shift-drag tilts.",
         "kind": "client",
         "impl": None,
-        "implemented": False,
+        "implemented": True,
     },
 }
 
@@ -86,6 +108,15 @@ def list_renderers() -> list[dict]:
             "implemented": r["implemented"],
         }
         for rid, r in RENDERERS.items()
+    ]
+
+
+@app.get("/api/fabrics")
+def list_fabrics() -> list[dict]:
+    """The three POC fabric backgrounds, for the UI selector."""
+    return [
+        {"name": name, "hex": "#{:02x}{:02x}{:02x}".format(*rgb), "default": name == DEFAULT_FABRIC}
+        for name, rgb in FABRICS.items()
     ]
 
 
@@ -123,8 +154,33 @@ def list_dsts() -> list[dict]:
     return out
 
 
+@app.get("/api/design/{filename}")
+def design_json(filename: str) -> dict:
+    """Canonical parsed design JSON for the client-side renderers (D, E).
+
+    Includes resolved per-block thread colors so the browser never
+    re-implements palette assignment — same colors as the server renderers.
+    """
+    safe_name = Path(filename).name
+    dst_path = (DST_DIR / safe_name).resolve()
+    if not dst_path.is_file() or DST_DIR.resolve() not in dst_path.parents:
+        raise HTTPException(status_code=404, detail=f"DST not found: {filename}")
+
+    try:
+        design = dst_parser.parse(dst_path)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Parse failed: {e}") from e
+
+    payload = design.to_dict()
+    payload["block_colors"] = [
+        "#{:02x}{:02x}{:02x}".format(*block_color(i))
+        for i in range(design.metadata["color_block_count"])
+    ]
+    return payload
+
+
 @app.get("/api/render/{renderer_id}/{filename}")
-def render(renderer_id: str, filename: str) -> Response:
+def render(renderer_id: str, filename: str, fabric: str = DEFAULT_FABRIC) -> Response:
     """Run the named server-side renderer and return PNG bytes."""
     renderer = RENDERERS.get(renderer_id)
     if renderer is None:
@@ -136,6 +192,10 @@ def render(renderer_id: str, filename: str) -> Response:
             status_code=400,
             detail=f"Renderer {renderer_id} is client-side; render in browser.",
         )
+    if fabric not in FABRICS:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown fabric: {fabric} (expected one of {list(FABRICS)})"
+        )
 
     # Lock the file path inside DST_DIR — no traversal, no symlink escapes.
     safe_name = Path(filename).name
@@ -144,7 +204,7 @@ def render(renderer_id: str, filename: str) -> Response:
         raise HTTPException(status_code=404, detail=f"DST not found: {filename}")
 
     try:
-        png_bytes = renderer["impl"](dst_path)
+        png_bytes = renderer["impl"](dst_path, fabric=fabric_rgb(fabric))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Render failed: {e}") from e
 

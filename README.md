@@ -12,7 +12,12 @@ For the full framing, read [POC_PRD_Coloring_Up_Engine.md](POC_PRD_Coloring_Up_E
   - `poc2_thread_catalogue/` — Madeira thread DB + color-matching algorithm bake-off
   - `poc3_color_up_editor/` — interactive web editor (blocked on POCs 1 & 2)
   - `poc4_order_workflow/` — order → proof → approval workflow (blocked on POC 3)
-- **`shared/`** — cross-POC Python utilities. Empty for now; first occupant will be color-space math.
+- **`webapp/`** — the **Stitch Proofer**: a single-file, zero-dependency web app
+  (open `webapp/DST_Render_Test.html` in any browser, drag a DST onto it). Per-block color
+  pickers, fabric colors, true 1:1 physical scale + zoom inspection. Parses DSTs
+  locally in the browser — designs never leave the machine, so the file is safe
+  to share with the team or host publicly.
+- **`shared/`** — cross-POC Python utilities. First occupant: `design_colors.py` (default thread palette + fabric colors).
 - **`data/`** — gitignored. Drop public sample DSTs into `data/sample_dsts/`, Madeira source files into `data/madeira_sources/`. See `data/README.md` for sources.
 - **`outputs/`** — gitignored. Render artifacts, scorecards, comparison galleries.
 - **`Trim Sheet Examples/`** — reference PDFs of the production trim sheet format the full app will eventually generate.
@@ -23,11 +28,14 @@ For the full framing, read [POC_PRD_Coloring_Up_Engine.md](POC_PRD_Coloring_Up_E
 Requires Python 3.12 and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync                    # creates .venv/ and installs deps
-uv run pytest              # runs tests (zero today; should exit clean)
-uv run ruff check .        # lint
-uv run ruff format .       # format
+uv sync                        # creates .venv/ and installs deps
+uv run playwright install chromium   # once — for the browser-renderer tests
+uv run pytest                  # full suite (browser tests skip if chromium absent)
+uv run ruff check .            # lint
+uv run ruff format .           # format
 ```
+
+Renderer C needs the system Cairo library: `brew install cairo pkg-config`.
 
 ## Test data
 
