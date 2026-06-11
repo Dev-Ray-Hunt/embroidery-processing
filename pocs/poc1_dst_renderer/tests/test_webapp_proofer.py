@@ -271,5 +271,24 @@ def test_lit_mode_recolor_and_tilt(proofer_page):
     _set_mode(proofer_page, "shaded")
 
 
+def test_loading_new_design_in_every_mode_keeps_rendering(proofer_page):
+    """Regression: loading a design while the 2.5D mode was active fit the
+    view against the hidden (0x0) 2D canvas, collapsing scale to 0 — blank
+    screen that persisted across mode switches. Every mode must survive a
+    fresh load with a sane scale and visible ink."""
+    others = [p for p in DST_FILES if p != DST_FILES[0]] or DST_FILES
+    for mode in ("flat", "shaded", "soft", "lit"):
+        _load(proofer_page, DST_FILES[0])
+        _set_mode(proofer_page, mode)
+        _load(proofer_page, others[0])  # the second load is the regression
+        scale = proofer_page.evaluate("() => window.__proofer.state.scale")
+        assert scale > 0.01, f"mode {mode}: fit collapsed to scale {scale} on second load"
+        img = _canvas_shot(proofer_page)
+        assert ink_fraction(ink_mask(img.resize((300, 300)), WHITE)) > 0.01, (
+            f"mode {mode}: blank canvas after loading a second design"
+        )
+    _set_mode(proofer_page, "shaded")
+
+
 def test_no_js_errors_accumulated(proofer_page):
     assert proofer_page.js_errors == [], f"JS errors during session: {proofer_page.js_errors}"

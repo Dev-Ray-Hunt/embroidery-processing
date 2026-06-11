@@ -561,7 +561,11 @@ function designSizeUnits() {
 
 function setZoom(scale, centerCss) {
   // Keep the design point under `centerCss` (CSS px) fixed while zooming.
-  const c = centerCss || [stage.clientWidth / 2, stage.clientHeight / 2];
+  // All view math measures #viewport: it is always visible, whereas the
+  // canvases swap display per renderer mode — a display:none canvas measures
+  // 0×0, which collapsed the fit to scale 0 when a design was loaded while
+  // the 2.5D mode was active.
+  const c = centerCss || [viewport.clientWidth / 2, viewport.clientHeight / 2];
   const k = scale / state.scale;
   state.ox = c[0] - (c[0] - state.ox) * k;
   state.oy = c[1] - (c[1] - state.oy) * k;
@@ -572,14 +576,14 @@ function setZoom(scale, centerCss) {
 function centerAt(scale) {
   const [w, h, minX, minY] = designSizeUnits();
   state.scale = scale;
-  state.ox = (stage.clientWidth - w * scale) / 2 - minX * scale;
-  state.oy = (stage.clientHeight - h * scale) / 2 - minY * scale;
+  state.ox = (viewport.clientWidth - w * scale) / 2 - minX * scale;
+  state.oy = (viewport.clientHeight - h * scale) / 2 - minY * scale;
   draw();
 }
 
 function zoomFit() {
   const [w, h] = designSizeUnits();
-  centerAt(0.92 * Math.min(stage.clientWidth / w, stage.clientHeight / h));
+  centerAt(0.92 * Math.min(viewport.clientWidth / w, viewport.clientHeight / h));
 }
 
 function zoomPhysical(mult) {
