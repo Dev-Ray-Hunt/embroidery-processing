@@ -95,8 +95,11 @@ def list_dsts() -> list[dict]:
     if not DST_DIR.exists():
         return []
 
+    # Case-insensitive: real DST files (and the Embroidermodder samples) are
+    # often named .DST. pathlib.glob is case-sensitive on macOS, so match by suffix.
+    dsts = sorted(p for p in DST_DIR.iterdir() if p.suffix.lower() == ".dst")
     out: list[dict] = []
-    for p in sorted(DST_DIR.glob("*.dst")):
+    for p in dsts:
         entry: dict = {
             "name": p.name,
             "size_bytes": p.stat().st_size,
