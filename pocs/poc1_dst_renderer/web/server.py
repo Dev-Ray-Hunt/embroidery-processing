@@ -15,11 +15,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pyembroidery
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
+from pocs.poc1_dst_renderer.src import dst_parser
 from pocs.poc1_dst_renderer.src.renderers import a_pyembroidery
 
 # Resolve the repo root from this file's location:
@@ -102,28 +102,16 @@ def list_dsts() -> list[dict]:
             "size_bytes": p.stat().st_size,
         }
         try:
-            pattern = pyembroidery.read(str(p))
-            if pattern is None:
-                raise ValueError("pyembroidery returned None")
-            extents = pattern.extents()
-            stitch_count = 0
-            color_changes = 0
-            for s in pattern.stitches:
-                cmd = s[2]
-                if cmd == pyembroidery.EmbConstant.STITCH:
-                    stitch_count += 1
-                elif cmd == pyembroidery.EmbConstant.COLOR_CHANGE:
-                    color_changes += 1
+            design = dst_parser.parse(p)
+            m = design.metadata
             entry.update(
                 {
-                    # stitch count = STITCH commands only (matches Wilcom / tools)
-                    "stitches": stitch_count,
-                    # total commands incl. jumps/trims/color-changes/end
-                    "commands": len(pattern.stitches),
-                    "color_blocks": color_changes + 1,
-                    "extents": list(extents),
-                    "width_mm": round((extents[2] - extents[0]) / 10, 1),
-                    "height_mm": round((extents[3] - extents[1]) / 10, 1),
+                    "stitches": m["stitch_count"],
+                    "commands": m["command_count"],
+                    "color_blocks": m["color_block_count"],
+                    "extents": list(design.extents),
+                    "width_mm": m["width_mm"],
+                    "height_mm": m["height_mm"],
                 }
             )
         except Exception as e:  # noqa: BLE001 — surface any parser failure to the UI

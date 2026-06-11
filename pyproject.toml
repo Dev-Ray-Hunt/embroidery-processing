@@ -29,3 +29,6 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["pocs", "shared"]
 python_files = ["test_*.py", "*_test.py"]
+# The project is not installed (tool.uv package = false), so put the repo root
+# on sys.path for tests to import `pocs.*` / `shared.*`.
+pythonpath = ["."]

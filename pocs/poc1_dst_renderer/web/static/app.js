@@ -114,11 +114,10 @@ async function renderPanel(rendererId, filename) {
       <img src="${objectUrl}" alt="${rendererId} render of ${filename}">
       <span class="timing">${elapsed} ms</span>
     `;
-    // Free the blob URL when the image is replaced (or on next render).
-    article.querySelector('img').addEventListener('load', () => {
-      // Keep the URL alive for the lifetime of this image; revoke on replacement
-      // is handled implicitly by the next innerHTML assignment.
-    });
+    // Once the image has decoded the blob, the object URL can be released.
+    article
+      .querySelector('img')
+      .addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
   } catch (e) {
     area.innerHTML = `<span class="error">${e.message}</span>`;
   }
