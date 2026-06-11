@@ -10,13 +10,17 @@
     <header>
       <h1>POC 1 — DST Renderer Bake-off</h1>
       <p>
-        Pick a DST. Each panel runs one of the bake-off renderers against it. Only renderer A is
-        wired up so far; B–E are placeholders until those land.
+        Pick a DST and a fabric. Each panel runs one of the five bake-off renderers against it.
+        D and E are interactive: wheel to zoom, drag to pan; D highlights the color block under
+        the cursor; E tilts with shift-drag.
       </p>
     </header>
 
     <main>
       <aside id="dst-list">
+        <h2>Fabric</h2>
+        <div id="fabric-row"><span class="loading">Loading…</span></div>
+
         <h2>DST files</h2>
         <p class="hint">From <code>data/sample_dsts/</code></p>
         <ul id="dst-items">
@@ -31,6 +35,6 @@
       </section>
     </main>
 
-    <script src="/app.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pocs.poc1_dst_renderer.src import dst_parser
 from pocs.poc1_dst_renderer.src.renderers import a_pyembroidery, b_pillow, c_cairo
-from shared.design_colors import DEFAULT_FABRIC, FABRICS, fabric_rgb
+from shared.design_colors import DEFAULT_FABRIC, FABRICS, block_color, fabric_rgb
 
 
 def _render_a_on_fabric(dst_path: Path, *, fabric: tuple[int, int, int]) -> bytes:
@@ -78,17 +78,17 @@ RENDERERS: dict[str, dict] = {
     },
     "d": {
         "title": "D. HTML5 Canvas (browser)",
-        "desc": "Browser-side canvas with rounded line caps. Interactive zoom/pan.",
+        "desc": "Browser-side canvas, round caps. Zoom/pan + hover highlights a color block.",
         "kind": "client",
         "impl": None,
-        "implemented": False,
+        "implemented": True,
     },
     "e": {
         "title": "E. WebGL/Three.js 2.5D",
-        "desc": "Three.js scene with shaded thread geometry.",
+        "desc": "Instanced 3D thread geometry on a fabric plane. Zoom/pan, shift-drag tilts.",
         "kind": "client",
         "impl": None,
-        "implemented": False,
+        "implemented": True,
     },
 }
 
@@ -152,6 +152,31 @@ def list_dsts() -> list[dict]:
             entry["error"] = f"{type(e).__name__}: {e}"
         out.append(entry)
     return out
+
+
+@app.get("/api/design/{filename}")
+def design_json(filename: str) -> dict:
+    """Canonical parsed design JSON for the client-side renderers (D, E).
+
+    Includes resolved per-block thread colors so the browser never
+    re-implements palette assignment — same colors as the server renderers.
+    """
+    safe_name = Path(filename).name
+    dst_path = (DST_DIR / safe_name).resolve()
+    if not dst_path.is_file() or DST_DIR.resolve() not in dst_path.parents:
+        raise HTTPException(status_code=404, detail=f"DST not found: {filename}")
+
+    try:
+        design = dst_parser.parse(dst_path)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Parse failed: {e}") from e
+
+    payload = design.to_dict()
+    payload["block_colors"] = [
+        "#{:02x}{:02x}{:02x}".format(*block_color(i))
+        for i in range(design.metadata["color_block_count"])
+    ]
+    return payload
 
 
 @app.get("/api/render/{renderer_id}/{filename}")

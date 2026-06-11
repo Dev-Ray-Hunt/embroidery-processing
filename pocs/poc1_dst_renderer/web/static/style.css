@@ -205,3 +205,46 @@ main {
   font-size: 0.7rem;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
+
+.render-area .client-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+#fabric-row {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+}
+
+.fabric-swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.fabric-swatch .chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--swatch);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.fabric-swatch:hover {
+  background: #f3f3f3;
+}
+
+.fabric-swatch.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}

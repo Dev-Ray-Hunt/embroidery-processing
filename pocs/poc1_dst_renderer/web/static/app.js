@@ -1,18 +1,37 @@
-// POC 1 bake-off UI — vanilla JS, no build step.
+// POC 1 bake-off UI — vanilla JS ES modules, no build step.
 //
-// Loads the DST list and renderer registry from the backend, builds the
-// 5-panel grid, and re-renders all server-side panels when the user picks
-// a DST. Client-side renderers (D, E) will plug in later.
+// Loads the DST list, renderer registry, and fabric list from the backend,
+// builds the 5-panel grid, and re-renders every panel when the user picks a
+// DST or switches fabric. Server renderers (A-C) return PNGs; client
+// renderers (D, E) draw into live canvases from the design JSON.
+
+import { mount as mountD } from './renderer_d.js';
+import { mount as mountE } from './renderer_e.js';
+
+const CLIENT_RENDERERS = { d: mountD, e: mountE };
 
 const grid = document.getElementById('grid');
 const dstItems = document.getElementById('dst-items');
+const fabricRow = document.getElementById('fabric-row');
 
 let renderers = [];
+let fabrics = [];
+let selectedFabric = null;
 let selectedFilename = null;
 let selectedItem = null;
 
+// Live client-renderer instances, keyed by renderer id, so fabric switches
+// restyle in place instead of rebuilding 60k instanced meshes.
+const clientMounts = {};
+// Design JSON cache: filename -> parsed design (they're immutable).
+const designCache = {};
+
 function fmtNumber(n) {
   return n.toLocaleString();
+}
+
+function fabricHex() {
+  return fabrics.find((f) => f.name === selectedFabric)?.hex ?? '#f2f1ec';
 }
 
 async function loadRenderers() {
@@ -23,6 +42,39 @@ async function loadRenderers() {
   }
   renderers = await r.json();
   buildGrid();
+}
+
+async function loadFabrics() {
+  const r = await fetch('/api/fabrics');
+  if (!r.ok) return;
+  fabrics = await r.json();
+  selectedFabric = fabrics.find((f) => f.default)?.name ?? fabrics[0]?.name;
+  fabricRow.innerHTML = '';
+  for (const f of fabrics) {
+    const btn = document.createElement('button');
+    btn.className = 'fabric-swatch' + (f.name === selectedFabric ? ' selected' : '');
+    btn.dataset.fabric = f.name;
+    btn.style.setProperty('--swatch', f.hex);
+    btn.title = f.name;
+    btn.innerHTML = `<span class="chip"></span>${f.name}`;
+    btn.addEventListener('click', () => selectFabric(f.name));
+    fabricRow.appendChild(btn);
+  }
+}
+
+function selectFabric(name) {
+  if (name === selectedFabric) return;
+  selectedFabric = name;
+  fabricRow
+    .querySelectorAll('.fabric-swatch')
+    .forEach((b) => b.classList.toggle('selected', b.dataset.fabric === name));
+  if (!selectedFilename) return;
+  // Server panels re-render; client panels restyle in place.
+  for (const r of renderers) {
+    if (!r.implemented) continue;
+    if (r.kind === 'server') renderServerPanel(r.id, selectedFilename);
+    else clientMounts[r.id]?.setFabric(fabricHex());
+  }
 }
 
 function buildGrid() {
@@ -85,20 +137,25 @@ async function selectDst(filename, li) {
   selectedItem = li;
   selectedFilename = filename;
 
-  // Trigger every server-side implemented renderer in parallel.
-  const tasks = renderers
-    .filter((r) => r.implemented && r.kind === 'server')
-    .map((r) => renderPanel(r.id, filename));
+  const tasks = [];
+  for (const r of renderers) {
+    if (!r.implemented) continue;
+    tasks.push(
+      r.kind === 'server' ? renderServerPanel(r.id, filename) : renderClientPanel(r.id, filename)
+    );
+  }
   await Promise.all(tasks);
 }
 
-async function renderPanel(rendererId, filename) {
+async function renderServerPanel(rendererId, filename) {
   const article = grid.querySelector(`.renderer[data-renderer="${rendererId}"]`);
   if (!article) return;
   const area = article.querySelector('.render-area');
   area.innerHTML = `<span class="placeholder">Rendering…</span>`;
 
-  const url = `/api/render/${rendererId}/${encodeURIComponent(filename)}?t=${Date.now()}`;
+  const url =
+    `/api/render/${rendererId}/${encodeURIComponent(filename)}` +
+    `?fabric=${encodeURIComponent(selectedFabric)}&t=${Date.now()}`;
   const t0 = performance.now();
   try {
     const resp = await fetch(url);
@@ -123,7 +180,43 @@ async function renderPanel(rendererId, filename) {
   }
 }
 
+async function fetchDesign(filename) {
+  if (designCache[filename]) return designCache[filename];
+  const resp = await fetch(`/api/design/${encodeURIComponent(filename)}`);
+  if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
+  const design = await resp.json();
+  designCache[filename] = design;
+  return design;
+}
+
+async function renderClientPanel(rendererId, filename) {
+  const article = grid.querySelector(`.renderer[data-renderer="${rendererId}"]`);
+  if (!article) return;
+  const area = article.querySelector('.render-area');
+  area.innerHTML = `<span class="placeholder">Rendering…</span>`;
+
+  try {
+    clientMounts[rendererId]?.destroy();
+    delete clientMounts[rendererId];
+
+    const t0 = performance.now();
+    const design = await fetchDesign(filename);
+    const instance = CLIENT_RENDERERS[rendererId](area, design, fabricHex());
+    clientMounts[rendererId] = instance;
+    const total = (performance.now() - t0).toFixed(0);
+
+    const timing = document.createElement('span');
+    timing.className = 'timing';
+    timing.textContent = `${total} ms (draw ${instance.renderMs.toFixed(0)} ms)`;
+    area.appendChild(timing);
+    // Mark painted for the automated harness.
+    area.dataset.rendered = '1';
+  } catch (e) {
+    area.innerHTML = `<span class="error">${e.message}</span>`;
+  }
+}
+
 (async function init() {
-  await loadRenderers();
+  await Promise.all([loadRenderers(), loadFabrics()]);
   await loadDsts();
 })();
