@@ -20,7 +20,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from pocs.poc1_dst_renderer.src import dst_parser
-from pocs.poc1_dst_renderer.src.renderers import a_pyembroidery, b_pillow
+from pocs.poc1_dst_renderer.src.renderers import a_pyembroidery, b_pillow, c_cairo
 from shared.design_colors import DEFAULT_FABRIC, FABRICS, fabric_rgb
 
 
@@ -73,8 +73,8 @@ RENDERERS: dict[str, dict] = {
         "title": "C. Cairo 2D antialiased",
         "desc": "PyCairo vector renderer with smooth antialiased lines.",
         "kind": "server",
-        "impl": None,
-        "implemented": False,
+        "impl": c_cairo.render_png,
+        "implemented": True,
     },
     "d": {
         "title": "D. HTML5 Canvas (browser)",
