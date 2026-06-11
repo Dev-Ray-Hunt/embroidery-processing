@@ -1,0 +1,752 @@
+<!doctype html>
+<!--
+  Stitch Proofer — portable embroidery DST viewer & color-up tool.
+
+  ONE self-contained file: no server, no dependencies, no build step. Open it
+  in any modern browser (double-click works), then drag a .DST file onto the
+  page. The file is parsed locally in the browser — design data never leaves
+  the machine, so this file is safe to email, share, or host publicly.
+
+  Four renderer styles, mirroring the POC 1 bake-off contenders:
+    Flat      — plain colored stitches (bake-off D)
+    Shaded    — angle-based brightness, horizontal bright (bake-off B)
+    Soft      — translucent buildup + sheen line (bake-off C)
+    2.5D      — raw WebGL2, anisotropic (Kajiya-Kay) thread lighting with
+                stitch stacking and shift-drag tilt (bake-off E)
+  (Bake-off A is pyembroidery's Python writer — server-only by nature.)
+
+  Plus: per-thread-block color choice, fabric color, true 1:1 physical scale
+  (CSS standardizes 96 px/inch), wheel zoom + drag pan for close inspection.
+
+  DST decode mirrors pyembroidery's DstReader bit tables exactly; parity is
+  enforced by pocs/poc1_dst_renderer/tests/test_webapp_proofer.py.
+
+  Part of the Coloring Up Engine POC repo (POC 1 evaluation tool / POC 3 spike).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stitch Proofer</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --panel: #fff; --border: #ddd; --muted: #6b6b6b;
+    --accent: #2f6fb5; --accent-bg: #e6f0fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: #1d1d1f; height: 100vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 1rem; padding: 0.5rem 1rem;
+    background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  header h1 { font-size: 1rem; margin: 0; font-weight: 650; }
+  header .info { color: var(--muted); font-size: 0.8rem; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 250px; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 0.75rem; overflow-y: auto; flex-shrink: 0;
+  }
+  #sidebar h2 { font-size: 0.8rem; margin: 0.9rem 0 0.4rem; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--muted); }
+  #sidebar h2:first-child { margin-top: 0; }
+  #viewport { flex: 1; position: relative; overflow: hidden; background: #e8e8e6;
+    cursor: grab; touch-action: none; }
+  #viewport.dragging { cursor: grabbing; }
+  #viewport canvas { position: absolute; inset: 0; }
+  #drop-hint {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 0.75rem; color: var(--muted);
+    pointer-events: none; text-align: center; padding: 2rem;
+  }
+  #drop-hint .big { font-size: 1.1rem; font-weight: 600; }
+  body.dragover #viewport { outline: 3px dashed var(--accent); outline-offset: -8px; }
+  .row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  button, label.filebtn {
+    font: inherit; font-size: 0.8rem; padding: 0.3rem 0.65rem; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--panel); cursor: pointer;
+  }
+  button:hover, label.filebtn:hover { background: #f0f0ef; }
+  button.active { background: var(--accent-bg); border-color: var(--accent); }
+  input[type=file] { display: none; }
+  #zoom-label { font-size: 0.8rem; color: var(--muted); min-width: 4.5em; }
+  #renderer-row button { display: block; width: 100%; text-align: left; margin-bottom: 4px; }
+  #renderer-row button small { color: var(--muted); float: right; }
+  .block-row {
+    display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.35rem;
+    border-radius: 5px; cursor: pointer; border: 1px solid transparent;
+  }
+  .block-row:hover { background: #f4f4f3; }
+  .block-row.highlighted { background: var(--accent-bg); border-color: var(--accent); }
+  .block-row input[type=color] {
+    width: 30px; height: 24px; border: 1px solid var(--border); border-radius: 4px;
+    padding: 0; background: none; cursor: pointer;
+  }
+  .block-row .label { font-size: 0.8rem; flex: 1; }
+  .block-row .count { font-size: 0.7rem; color: var(--muted); }
+  .fabric-row { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+  .fabric-row button .chip {
+    display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.25); vertical-align: -1px; margin-right: 4px;
+  }
+  .hint { font-size: 0.72rem; color: var(--muted); line-height: 1.4; margin-top: 0.3rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stitch Proofer</h1>
+  <label class="filebtn">Open DST… <input type="file" id="file-input" accept=".dst,.DST"></label>
+  <span class="info" id="design-info">no design loaded</span>
+</header>
+<main>
+  <div id="sidebar">
+    <h2>Renderer</h2>
+    <div id="renderer-row">
+      <button data-mode="flat">Flat <small>bake-off D</small></button>
+      <button data-mode="shaded" class="active">Shaded <small>bake-off B</small></button>
+      <button data-mode="soft">Soft <small>bake-off C</small></button>
+      <button data-mode="lit">2.5D <small>bake-off E</small></button>
+    </div>
+    <p class="hint" id="renderer-hint">In 2.5D, shift-drag tilts the view.</p>
+
+    <h2>View</h2>
+    <div class="row">
+      <button id="zoom-fit">Fit</button>
+      <button id="zoom-100">1:1</button>
+      <button id="zoom-200">2×</button>
+      <button id="zoom-400">4×</button>
+      <span id="zoom-label"></span>
+    </div>
+    <p class="hint">Wheel to zoom, drag to pan. “1:1” shows true physical size on a
+      standard-DPI display (96 px/inch).</p>
+
+    <h2>Fabric</h2>
+    <div class="fabric-row" id="fabric-row"></div>
+
+    <h2>Thread blocks</h2>
+    <div id="blocks"></div>
+    <p class="hint" id="blocks-hint">Click a block to highlight it. Pick any color —
+      Madeira catalogue matching comes with POC 2.</p>
+  </div>
+  <div id="viewport">
+    <canvas id="stage"></canvas>
+    <canvas id="stage3d" style="display:none"></canvas>
+    <div id="drop-hint">
+      <span class="big">Drop a .DST file here</span>
+      <span>or use “Open DST…” above. The file is read locally in your browser —
+        it is never uploaded.</span>
+    </div>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+/* ---------------- DST parser (mirrors pyembroidery's DstReader) ----------- */
+
+function bit(b, pos) { return (b >> pos) & 1; }
+
+function decodeDx(b0, b1, b2) {
+  return bit(b2, 2) * 81 - bit(b2, 3) * 81
+       + bit(b1, 2) * 27 - bit(b1, 3) * 27
+       + bit(b0, 2) * 9  - bit(b0, 3) * 9
+       + bit(b1, 0) * 3  - bit(b1, 1) * 3
+       + bit(b0, 0)      - bit(b0, 1);
+}
+
+function decodeDy(b0, b1, b2) {
+  const y = bit(b2, 5) * 81 - bit(b2, 4) * 81
+          + bit(b1, 5) * 27 - bit(b1, 4) * 27
+          + bit(b0, 5) * 9  - bit(b0, 4) * 9
+          + bit(b1, 7) * 3  - bit(b1, 6) * 3
+          + bit(b0, 7)      - bit(b0, 6);
+  return -y; // pyembroidery negates: +y is down (screen orientation)
+}
+
+// Returns { name, stitches: [[x,y,cmd]...], blocks, counts, extents }.
+// cmd ∈ STITCH | JUMP | COLOR_CHANGE | SEQUIN | END. Coordinates are absolute
+// DST units (0.1 mm). Extents are over STITCH points only (what gets drawn).
+function parseDst(buffer, name) {
+  const data = new Uint8Array(buffer);
+  if (data.length < 512) throw new Error('Not a DST file (shorter than the 512-byte header)');
+  const stitches = [];
+  let x = 0, y = 0, sequinMode = false;
+  for (let i = 512; i + 2 < data.length; i += 3) {
+    const b0 = data[i], b1 = data[i + 1], b2 = data[i + 2];
+    x += decodeDx(b0, b1, b2);
+    y += decodeDy(b0, b1, b2);
+    if ((b2 & 0b11110011) === 0b11110011) { stitches.push([x, y, 'END']); break; }
+    else if ((b2 & 0b11000011) === 0b11000011) stitches.push([x, y, 'COLOR_CHANGE']);
+    else if ((b2 & 0b01000011) === 0b01000011) { sequinMode = !sequinMode; stitches.push([x, y, 'SEQUIN']); }
+    else if ((b2 & 0b10000011) === 0b10000011) stitches.push([x, y, sequinMode ? 'SEQUIN' : 'JUMP']);
+    else stitches.push([x, y, 'STITCH']);
+  }
+
+  // Color blocks: segments between COLOR_CHANGEs. Thread is cut at a color
+  // change, so the pen resets (no connector into the new block).
+  const blocks = [[]];
+  let prev = null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let stitchCount = 0;
+  for (const [sx, sy, cmd] of stitches) {
+    if (cmd === 'STITCH') {
+      stitchCount++;
+      if (sx < minX) minX = sx; if (sx > maxX) maxX = sx;
+      if (sy < minY) minY = sy; if (sy > maxY) maxY = sy;
+      if (prev) blocks[blocks.length - 1].push([prev[0], prev[1], sx, sy]);
+      prev = [sx, sy];
+    } else if (cmd === 'COLOR_CHANGE') {
+      blocks.push([]);
+      prev = null;
+    } else {
+      prev = [sx, sy];
+    }
+  }
+  if (!stitchCount) throw new Error('No stitches decoded — is this really a DST file?');
+  return {
+    name,
+    stitches,
+    blocks,
+    counts: {
+      stitches: stitchCount,
+      commands: stitches.length,
+      colorChanges: blocks.length - 1,
+    },
+    extents: [minX, minY, maxX, maxY],
+  };
+}
+
+/* ---------------- Palette & fabrics (same defaults as the POC repo) ------- */
+
+const PALETTE = ['#1b3f94','#c8102e','#ffc72c','#ffffff','#101820','#007934','#f37321',
+  '#5d238b','#898d8d','#722f37','#009ca6','#f68da9','#546223','#996633','#add8e6',
+  '#fff0a5','#36394a','#bc204b','#8cc474','#5e4934'];
+const FABRICS = { white: '#f2f1ec', black: '#1c1c1e', navy: '#232f4b' };
+
+/* ---------------- App state ---------------------------------------------- */
+
+const viewport = document.getElementById('viewport');
+const stage = document.getElementById('stage');
+const stage3d = document.getElementById('stage3d');
+const ctx = stage.getContext('2d');
+const PX_PER_MM = 96 / 25.4;          // CSS reference pixel definition
+const UNIT_MM = 0.1;                  // 1 DST unit = 0.1 mm
+const THREAD_W = 4;                   // thread ≈ 0.4 mm = 4 DST units
+
+const state = {
+  design: null,
+  colors: [],            // hex per block
+  fabric: FABRICS.white,
+  mode: 'shaded',        // flat | shaded | soft | lit
+  // zoom: CSS px per DST unit. 1:1 physical => PX_PER_MM * UNIT_MM.
+  scale: 1, ox: 0, oy: 0,
+  tilt: 0,               // radians, 2.5D mode only
+  highlight: -1,
+  lastDrawMs: 0,
+};
+
+function dpr() { return window.devicePixelRatio || 1; }
+
+function resizeCanvas() {
+  for (const c of [stage, stage3d]) {
+    c.width = Math.round(viewport.clientWidth * dpr());
+    c.height = Math.round(viewport.clientHeight * dpr());
+    c.style.width = viewport.clientWidth + 'px';
+    c.style.height = viewport.clientHeight + 'px';
+  }
+  if (glr.gl) glr.gl.viewport(0, 0, stage3d.width, stage3d.height);
+  if (state.design) draw();
+}
+
+function hexRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/* ---------------- 2D renderers (flat / shaded / soft) --------------------- */
+
+function shadeHex(hex, k) {
+  const [r, g, b] = hexRgb(hex);
+  const ch = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${ch(r)},${ch(g)},${ch(b)})`;
+}
+
+// Angle-shaded strokes batched into a few brightness buckets per block so a
+// 63k-stitch design still draws in a handful of path strokes.
+const SHADE_BUCKETS = [1.16, 1.05, 0.92, 0.78];
+
+function blockPath(segs) {
+  const path = new Path2D();
+  for (const [x0, y0, x1, y1] of segs) { path.moveTo(x0, y0); path.lineTo(x1, y1); }
+  return path;
+}
+
+function draw2d() {
+  const d = state.design;
+  const s = state.scale * dpr();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = state.fabric;
+  ctx.fillRect(0, 0, stage.width, stage.height);
+  ctx.setTransform(s, 0, 0, s, state.ox * dpr(), state.oy * dpr());
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  d.blocks.forEach((segs, i) => {
+    const base = state.colors[i] || PALETTE[i % PALETTE.length];
+    const dim = state.highlight >= 0 && state.highlight !== i;
+    ctx.globalAlpha = dim ? 0.15 : 1.0;
+
+    if (state.mode === 'flat') {
+      ctx.lineWidth = THREAD_W;
+      ctx.strokeStyle = base;
+      ctx.stroke(blockPath(segs));
+    } else if (state.mode === 'soft') {
+      // Cairo-style: translucent body builds density, thin sheen line on top.
+      ctx.lineWidth = THREAD_W;
+      ctx.globalAlpha = (dim ? 0.15 : 1.0) * 0.85;
+      ctx.strokeStyle = base;
+      const body = blockPath(segs);
+      ctx.stroke(body);
+      ctx.lineWidth = THREAD_W * 0.35;
+      ctx.globalAlpha = (dim ? 0.15 : 1.0) * 0.25;
+      const [r, g, b] = hexRgb(base);
+      ctx.strokeStyle = `rgb(${r + (255 - r) * 0.7},${g + (255 - g) * 0.7},${b + (255 - b) * 0.7})`;
+      ctx.stroke(body);
+    } else {
+      // shaded: cos² of segment angle → brightness bucket.
+      ctx.lineWidth = THREAD_W;
+      const buckets = SHADE_BUCKETS.map(() => new Path2D());
+      for (const [x0, y0, x1, y1] of segs) {
+        const dx = x1 - x0, dy = y1 - y0;
+        const len2 = dx * dx + dy * dy;
+        const c2 = len2 ? (dx * dx) / len2 : 1;
+        const b = c2 > 0.75 ? 0 : c2 > 0.5 ? 1 : c2 > 0.25 ? 2 : 3;
+        buckets[b].moveTo(x0, y0);
+        buckets[b].lineTo(x1, y1);
+      }
+      buckets.forEach((path, b) => {
+        ctx.strokeStyle = shadeHex(base, SHADE_BUCKETS[b]);
+        ctx.stroke(path);
+      });
+    }
+  });
+  ctx.globalAlpha = 1.0;
+}
+
+/* ---------------- 2.5D WebGL renderer (bake-off E, no dependencies) ------- */
+/* Instanced quads, one per stitch segment. Kajiya-Kay anisotropic lighting:
+   thread sheen follows stitch direction. Later stitches stack higher (real
+   thread layering — also what kills z-fighting). Shift-drag tilts. */
+
+const VS = `#version 300 es
+layout(location=0) in vec2 aCorner;   // unit quad: x ∈ ±0.5 (along), y ∈ ±0.5 (across)
+layout(location=1) in vec2 aStart;
+layout(location=2) in vec2 aEnd;
+layout(location=3) in vec3 aColor;
+layout(location=4) in vec2 aMeta;     // (blockIndex, stackOrder 0..1)
+uniform vec2 uViewport;               // device px
+uniform float uScale;                 // device px per DST unit
+uniform vec2 uOffset;                 // device px
+uniform float uTilt;                  // radians
+uniform float uThreadW;               // DST units
+out vec3 vColor;
+out vec3 vTangent;
+flat out float vBlock;
+out float vAcross;
+void main() {
+  vec2 seg = aEnd - aStart;
+  float len = length(seg);
+  vec2 t = len > 0.0 ? seg / len : vec2(1.0, 0.0);
+  vec2 n = vec2(-t.y, t.x);
+  // Extend along the segment so neighbours overlap like round caps.
+  vec2 pos = (aStart + aEnd) * 0.5
+           + aCorner.x * t * (len + uThreadW * 0.9)
+           + aCorner.y * n * uThreadW;
+  // Stack height: later stitches sit on top (z in DST units).
+  float z = aMeta.y * 2.0 + uThreadW * 0.3;
+  // To device px, then tilt about the horizontal axis through screen centre.
+  vec2 px = pos * uScale + uOffset;
+  float cy = uViewport.y * 0.5;
+  float vy = px.y - cy;
+  float ct = cos(uTilt), st = sin(uTilt);
+  float zPx = z * uScale;
+  float yT = vy * ct - zPx * st;
+  float depth = vy * st + zPx * ct;      // larger = closer to the camera
+  vec2 ndc = vec2(px.x / uViewport.x * 2.0 - 1.0,
+                  1.0 - (yT + cy) / uViewport.y * 2.0);
+  gl_Position = vec4(ndc, -depth / 1.0e6, 1.0);
+  vColor = aColor;
+  vTangent = normalize(vec3(t.x, -t.y * ct, t.y * st)); // screen-y is flipped vs NDC-y
+  vBlock = aMeta.x;
+  vAcross = aCorner.y * 2.0;             // -1..1 across the thread
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec3 vColor;
+in vec3 vTangent;
+flat in float vBlock;
+in float vAcross;
+uniform float uHighlight;
+uniform vec3 uFabric;
+out vec4 outColor;
+void main() {
+  vec3 T = normalize(vTangent);
+  vec3 L = normalize(vec3(-0.45, 0.55, 0.85));
+  vec3 V = vec3(0.0, 0.0, 1.0);
+  vec3 H = normalize(L + V);
+  // Kajiya-Kay: light a fiber by the component of L ⊥ to the thread direction.
+  float dTL = dot(T, L);
+  float diffuse = sqrt(max(0.0, 1.0 - dTL * dTL));
+  float dTH = dot(T, H);
+  float spec = pow(sqrt(max(0.0, 1.0 - dTH * dTH)), 28.0);
+  // Cylinder cross-section: bright crown, darker edges.
+  float crown = 0.72 + 0.48 * sqrt(max(0.0, 1.0 - vAcross * vAcross));
+  vec3 color = vColor * (0.40 + 0.62 * diffuse) * crown + vec3(0.55) * spec * 0.45;
+  if (uHighlight >= 0.0 && abs(vBlock - uHighlight) > 0.5) {
+    color = mix(color, uFabric, 0.85);
+  }
+  outColor = vec4(color, 1.0);
+}`;
+
+const glr = { gl: null, prog: null, vao: null, count: 0, colorBuf: null, ranges: [] };
+
+function glInit() {
+  const gl = stage3d.getContext('webgl2', { antialias: true });
+  if (!gl) return false;
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      throw new Error('shader: ' + gl.getShaderInfoLog(s));
+    }
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    throw new Error('link: ' + gl.getProgramInfoLog(prog));
+  }
+  glr.gl = gl;
+  glr.prog = prog;
+  gl.viewport(0, 0, stage3d.width, stage3d.height);
+  return true;
+}
+
+function glUploadDesign() {
+  const gl = glr.gl;
+  const d = state.design;
+  let total = 0;
+  for (const segs of d.blocks) total += segs.length;
+  glr.count = total;
+  glr.ranges = [];
+
+  const starts = new Float32Array(total * 2);
+  const ends = new Float32Array(total * 2);
+  const meta = new Float32Array(total * 2);
+  let k = 0;
+  d.blocks.forEach((segs, bi) => {
+    glr.ranges.push([k, segs.length]);
+    for (const [x0, y0, x1, y1] of segs) {
+      starts[k * 2] = x0; starts[k * 2 + 1] = y0;
+      ends[k * 2] = x1; ends[k * 2 + 1] = y1;
+      meta[k * 2] = bi; meta[k * 2 + 1] = k / total;
+      k++;
+    }
+  });
+
+  if (glr.vao) gl.deleteVertexArray(glr.vao);
+  glr.vao = gl.createVertexArray();
+  gl.bindVertexArray(glr.vao);
+
+  const buf = (loc, data, size, divisor) => {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(loc, divisor);
+    return b;
+  };
+  buf(0, new Float32Array([-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5]), 2, 0);
+  buf(1, starts, 2, 1);
+  buf(2, ends, 2, 1);
+  glr.colorBuf = buf(3, new Float32Array(total * 3), 3, 1);
+  buf(4, meta, 2, 1);
+  glUploadColors();
+}
+
+function glUploadColors() {
+  const gl = glr.gl;
+  const colors = new Float32Array(glr.count * 3);
+  state.design.blocks.forEach((segs, bi) => {
+    const [r, g, b] = hexRgb(state.colors[bi] || PALETTE[bi % PALETTE.length]);
+    const [k0, n] = glr.ranges[bi];
+    for (let k = k0; k < k0 + n; k++) {
+      colors[k * 3] = r / 255; colors[k * 3 + 1] = g / 255; colors[k * 3 + 2] = b / 255;
+    }
+  });
+  gl.bindBuffer(gl.ARRAY_BUFFER, glr.colorBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+}
+
+function draw3d() {
+  const gl = glr.gl;
+  const [fr, fg, fb] = hexRgb(state.fabric);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.clearColor(fr / 255, fg / 255, fb / 255, 1);
+  gl.clearDepth(1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.useProgram(glr.prog);
+  gl.bindVertexArray(glr.vao);
+  const u = (n) => gl.getUniformLocation(glr.prog, n);
+  gl.uniform2f(u('uViewport'), stage3d.width, stage3d.height);
+  gl.uniform1f(u('uScale'), state.scale * dpr());
+  gl.uniform2f(u('uOffset'), state.ox * dpr(), state.oy * dpr());
+  gl.uniform1f(u('uTilt'), state.tilt);
+  gl.uniform1f(u('uThreadW'), THREAD_W);
+  gl.uniform1f(u('uHighlight'), state.highlight);
+  gl.uniform3f(u('uFabric'), fr / 255, fg / 255, fb / 255);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, glr.count);
+}
+
+/* ---------------- Draw dispatch ------------------------------------------- */
+
+function draw() {
+  if (!state.design) return;
+  const t0 = performance.now();
+  if (state.mode === 'lit') {
+    if (!glr.gl) {
+      try {
+        if (!glInit()) throw new Error('WebGL2 unavailable');
+        glUploadDesign();
+      } catch (e) {
+        alert('2.5D renderer unavailable: ' + e.message);
+        setMode('shaded');
+        return;
+      }
+    }
+    stage.style.display = 'none';
+    stage3d.style.display = 'block';
+    draw3d();
+  } else {
+    stage3d.style.display = 'none';
+    stage.style.display = 'block';
+    draw2d();
+  }
+  state.lastDrawMs = performance.now() - t0;
+  updateZoomLabel();
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('#renderer-row button').forEach((b) =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  draw();
+}
+
+/* ---------------- View controls ------------------------------------------- */
+
+function designSizeUnits() {
+  const [minX, minY, maxX, maxY] = state.design.extents;
+  return [maxX - minX, maxY - minY, minX, minY];
+}
+
+function setZoom(scale, centerCss) {
+  // Keep the design point under `centerCss` (CSS px) fixed while zooming.
+  // All view math measures #viewport: it is always visible, whereas the
+  // canvases swap display per renderer mode — a display:none canvas measures
+  // 0×0, which collapsed the fit to scale 0 when a design was loaded while
+  // the 2.5D mode was active.
+  const c = centerCss || [viewport.clientWidth / 2, viewport.clientHeight / 2];
+  const k = scale / state.scale;
+  state.ox = c[0] - (c[0] - state.ox) * k;
+  state.oy = c[1] - (c[1] - state.oy) * k;
+  state.scale = scale;
+  draw();
+}
+
+function centerAt(scale) {
+  const [w, h, minX, minY] = designSizeUnits();
+  state.scale = scale;
+  state.ox = (viewport.clientWidth - w * scale) / 2 - minX * scale;
+  state.oy = (viewport.clientHeight - h * scale) / 2 - minY * scale;
+  draw();
+}
+
+function zoomFit() {
+  const [w, h] = designSizeUnits();
+  centerAt(0.92 * Math.min(viewport.clientWidth / w, viewport.clientHeight / h));
+}
+
+function zoomPhysical(mult) {
+  // 1:1 → one DST unit (0.1 mm) = 0.1 mm of screen, assuming 96 px/inch.
+  centerAt(PX_PER_MM * UNIT_MM * mult);
+}
+
+function updateZoomLabel() {
+  const pct = (state.scale / (PX_PER_MM * UNIT_MM)) * 100;
+  document.getElementById('zoom-label').textContent = pct.toFixed(0) + '%';
+  for (const [id, target] of [['zoom-100', 100], ['zoom-200', 200], ['zoom-400', 400]]) {
+    document.getElementById(id).classList.toggle('active', Math.abs(pct - target) < 1);
+  }
+}
+
+/* ---------------- UI wiring ----------------------------------------------- */
+
+function loadDesign(buffer, name) {
+  let design;
+  try {
+    design = parseDst(buffer, name);
+  } catch (e) {
+    alert('Could not read this file: ' + e.message);
+    return;
+  }
+  state.design = design;
+  state.colors = design.blocks.map((_, i) => PALETTE[i % PALETTE.length]);
+  state.highlight = -1;
+  state.tilt = 0;
+  document.getElementById('drop-hint').style.display = 'none';
+  if (glr.gl) glUploadDesign();
+
+  const [minX, minY, maxX, maxY] = design.extents;
+  const wMm = ((maxX - minX) * UNIT_MM).toFixed(1);
+  const hMm = ((maxY - minY) * UNIT_MM).toFixed(1);
+  document.getElementById('design-info').textContent =
+    `${name} — ${design.counts.stitches.toLocaleString()} stitches · ` +
+    `${design.blocks.length} color block${design.blocks.length > 1 ? 's' : ''} · ` +
+    `${wMm} × ${hMm} mm`;
+
+  const blocksEl = document.getElementById('blocks');
+  blocksEl.innerHTML = '';
+  design.blocks.forEach((segs, i) => {
+    const row = document.createElement('div');
+    row.className = 'block-row';
+    row.dataset.block = i;
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = state.colors[i];
+    picker.addEventListener('input', () => {
+      state.colors[i] = picker.value;
+      if (glr.gl) glUploadColors();
+      draw();
+    });
+    picker.addEventListener('click', (ev) => ev.stopPropagation());
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = `Block ${i + 1}`;
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = segs.length.toLocaleString() + ' st';
+    row.append(picker, label, count);
+    row.addEventListener('click', () => {
+      state.highlight = state.highlight === i ? -1 : i;
+      blocksEl.querySelectorAll('.block-row').forEach((r) =>
+        r.classList.toggle('highlighted', Number(r.dataset.block) === state.highlight));
+      draw();
+    });
+    blocksEl.appendChild(row);
+  });
+
+  zoomFit();
+}
+
+function readFile(file) {
+  if (!file) return;
+  file.arrayBuffer().then((buf) => loadDesign(buf, file.name));
+}
+
+document.getElementById('file-input').addEventListener('change', (ev) => readFile(ev.target.files[0]));
+
+document.addEventListener('dragover', (ev) => { ev.preventDefault(); document.body.classList.add('dragover'); });
+document.addEventListener('dragleave', () => document.body.classList.remove('dragover'));
+document.addEventListener('drop', (ev) => {
+  ev.preventDefault();
+  document.body.classList.remove('dragover');
+  readFile(ev.dataTransfer.files[0]);
+});
+
+// Renderer mode buttons.
+document.querySelectorAll('#renderer-row button').forEach((btn) =>
+  btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+
+// Fabric buttons + custom picker.
+const fabricRow = document.getElementById('fabric-row');
+for (const [fname, hex] of Object.entries(FABRICS)) {
+  const btn = document.createElement('button');
+  btn.dataset.fabric = fname;
+  btn.innerHTML = `<span class="chip" style="background:${hex}"></span>${fname}`;
+  if (hex === state.fabric) btn.classList.add('active');
+  btn.addEventListener('click', () => {
+    state.fabric = hex;
+    fabricRow.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    draw();
+  });
+  fabricRow.appendChild(btn);
+}
+const customFabric = document.createElement('input');
+customFabric.type = 'color';
+customFabric.value = '#888888';
+customFabric.title = 'Custom fabric color';
+customFabric.addEventListener('input', () => {
+  state.fabric = customFabric.value;
+  fabricRow.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+  draw();
+});
+fabricRow.appendChild(customFabric);
+
+document.getElementById('zoom-fit').addEventListener('click', zoomFit);
+document.getElementById('zoom-100').addEventListener('click', () => zoomPhysical(1));
+document.getElementById('zoom-200').addEventListener('click', () => zoomPhysical(2));
+document.getElementById('zoom-400').addEventListener('click', () => zoomPhysical(4));
+
+viewport.addEventListener('wheel', (ev) => {
+  if (!state.design) return;
+  ev.preventDefault();
+  const r = viewport.getBoundingClientRect();
+  const k = ev.deltaY < 0 ? 1.15 : 1 / 1.15;
+  setZoom(state.scale * k, [ev.clientX - r.left, ev.clientY - r.top]);
+}, { passive: false });
+
+let dragLast = null;
+let dragMode = null; // 'pan' | 'tilt'
+viewport.addEventListener('pointerdown', (ev) => {
+  dragLast = [ev.clientX, ev.clientY];
+  dragMode = ev.shiftKey && state.mode === 'lit' ? 'tilt' : 'pan';
+  viewport.classList.add('dragging');
+  viewport.setPointerCapture(ev.pointerId);
+});
+viewport.addEventListener('pointerup', (ev) => {
+  dragLast = null;
+  viewport.classList.remove('dragging');
+  viewport.releasePointerCapture(ev.pointerId);
+});
+viewport.addEventListener('pointermove', (ev) => {
+  if (!dragLast || !state.design) return;
+  const dx = ev.clientX - dragLast[0];
+  const dy = ev.clientY - dragLast[1];
+  dragLast = [ev.clientX, ev.clientY];
+  if (dragMode === 'tilt') {
+    state.tilt = Math.min(0.7, Math.max(0, state.tilt + dy * 0.005));
+  } else {
+    state.ox += dx;
+    state.oy += dy;
+  }
+  draw();
+});
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Exposed for the automated test harness (and console poking).
+window.__proofer = { state, parseDst, loadDesign, setMode, PX_PER_MM, UNIT_MM };
+</script>
+</body>
+</html>
