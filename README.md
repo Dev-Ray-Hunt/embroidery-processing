@@ -23,11 +23,14 @@ For the full framing, read [POC_PRD_Coloring_Up_Engine.md](POC_PRD_Coloring_Up_E
 Requires Python 3.12 and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync                    # creates .venv/ and installs deps
-uv run pytest              # runs tests (zero today; should exit clean)
-uv run ruff check .        # lint
-uv run ruff format .       # format
+uv sync                        # creates .venv/ and installs deps
+uv run playwright install chromium   # once — for the browser-renderer tests
+uv run pytest                  # full suite (browser tests skip if chromium absent)
+uv run ruff check .            # lint
+uv run ruff format .           # format
 ```
+
+Renderer C needs the system Cairo library: `brew install cairo pkg-config`.
 
 ## Test data
 

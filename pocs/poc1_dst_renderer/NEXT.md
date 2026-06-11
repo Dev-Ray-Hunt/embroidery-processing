@@ -1,32 +1,32 @@
-# POC 1 — Next Step: DST Parsing Foundation
+# POC 1 — Next Step: Human Evaluation
 
-From [POC_1_DST_Renderer.md](../../POC_1_DST_Renderer.md), Step 1: build the DST parsing utility that all 5 renderers will consume. Do this *before* any rendering work — same parsed JSON, five renderers.
+All five renderers are built and machine-verified (see
+[VERIFICATION.md](VERIFICATION.md)); measurements and provisional scores are
+in [FINDINGS.md](FINDINGS.md). What remains is the part only a human can do.
 
-## Tasks
+## Brandon's evaluation pass
 
-1. **Acquire test DSTs** — drop into `../../data/sample_dsts/` (gitignored).
+1. **Gallery review** — `uv run python scripts/build_gallery.py`, then
+   `open outputs/gallery/index.html`. All 105 renderer × design × fabric
+   combinations on one page.
+2. **Live interactivity check** —
+   `uv run uvicorn pocs.poc1_dst_renderer.web.server:app --reload --port 8000`.
+   Judge D's zoom/pan/hover-highlight and E's tilt *on a real GPU* (the
+   automated pass ran software WebGL).
+3. **Fill in the Q column** of the FINDINGS scorecard and accept/override the
+   draft primary/secondary recommendation.
+4. **Team preference ranking** (spec Step 3): show the gallery to the team,
+   ask which they'd send to a customer.
 
-   **Tier 1 (DONE 2026-04-27):** 3 publicly-licensed (zlib) DSTs from Embroidermodder/Embroidermodder. All under 5k stitches. See [`data/README.md`](../../data/README.md) for filenames, stitch counts, sources, and a one-shot re-fetch script.
+## Blocked on external input
 
-   **Tier 2 / Tier 3 (DONE 2026-05-01):** 4 Straight Down team-supplied DSTs covering 5,329 to 63,710 stitches, including a 19-color tier-3 stress-test design. Filenames preserve original Wilcom job IDs (`000XXXXXX-NNN.dst`). See [`data/README.md`](../../data/README.md). These files are not redistributable and live only on Brandon's machine.
+- **Stitched-sample photo** — one phone photo of a stitched-out design (from
+  the team request). Without it, "visual fidelity vs. real embroidery" stays
+  unscored. When it lands, drop it in `data/` and do the side-by-side against
+  the same design in the gallery.
 
-2. **Write the parser** (`src/dst_parser.py`) — given a DST file path, return a structured representation of:
-   - stitch coordinates (list of `(x, y, command)` tuples or equivalent)
-   - color-change events (indices into the stitch list where threads change)
-   - jump stitches (separated from normal stitches; renderers may skip them)
-   - metadata (total stitch count, bounding box / extents, color count)
+## Optional follow-ups (post-evaluation)
 
-3. **Define the canonical JSON schema** all 5 renderers will consume. Keep it small and obvious. Document in `src/SCHEMA.md`.
-
-4. **Validation** — internal-consistency checks only. No Wilcom ground truth available (architectural isolation). At minimum:
-   - parsed stitch count == `pyembroidery`'s reported count
-   - bounding box matches `pyembroidery`'s extents
-   - round-trip parse → JSON → reparse is stable
-
-5. **Tests** in `tests/test_dst_parser.py` — assert the above against the full 7-file corpus (Tier 1 zlib DSTs + Tier 2/3 team-supplied DSTs).
-
-## Definition of done
-
-- `uv run python -m pocs.poc1_dst_renderer.src.dst_parser <path-to-dst>` prints parsed JSON for any sample in the corpus.
-- `uv run pytest pocs/poc1_dst_renderer/tests/` passes.
-- `src/SCHEMA.md` documents the JSON shape clearly enough that the next session can start writing renderer A (pyembroidery PNG baseline) or B (Pillow 2D) against it without re-reading the parser code.
+- Kajiya-Kay anisotropic shader for E; real-GPU performance pass.
+- Procedural fabric weave texture (deliberately cut from this round).
+- Madeira palette plumb-through once POC 2 produces real thread colors.
