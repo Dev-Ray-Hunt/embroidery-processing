@@ -13,7 +13,7 @@ For the full framing, read [POC_PRD_Coloring_Up_Engine.md](POC_PRD_Coloring_Up_E
   - `poc3_color_up_editor/` — interactive web editor (blocked on POCs 1 & 2)
   - `poc4_order_workflow/` — order → proof → approval workflow (blocked on POC 3)
 - **`webapp/`** — the **Stitch Proofer**: a single-file, zero-dependency web app
-  (open `webapp/index.html` in any browser, drag a DST onto it). Per-block color
+  (open `webapp/DST_Render_Test.html` in any browser, drag a DST onto it). Per-block color
   pickers, fabric colors, true 1:1 physical scale + zoom inspection. Parses DSTs
   locally in the browser — designs never leave the machine, so the file is safe
   to share with the team or host publicly.

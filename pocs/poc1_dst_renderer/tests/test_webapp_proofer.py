@@ -1,4 +1,4 @@
-"""Verification for the portable Stitch Proofer (webapp/index.html).
+"""Verification for the portable Stitch Proofer (webapp/DST_Render_Test.html).
 
 Two claims to prove:
 
@@ -35,7 +35,7 @@ pytestmark = pytest.mark.skipif(
     not DST_FILES, reason="no sample DSTs in data/sample_dsts/ (gitignored)"
 )
 
-PROOFER_URL = (REPO_ROOT / "webapp" / "index.html").as_uri()
+PROOFER_URL = (REPO_ROOT / "webapp" / "DST_Render_Test.html").as_uri()
 WHITE = (242, 241, 236)
 _ids = [p.name for p in DST_FILES]
 
