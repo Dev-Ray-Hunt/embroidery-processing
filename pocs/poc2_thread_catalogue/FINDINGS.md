@@ -18,7 +18,8 @@ Exceeds the ≥200 pass bar 4×.
   named colors have RGB (217 of them backed by Madeira's own published swatch colors, the
   rest by Ink/Stitch only).
 - Notable data findings: Classic Rayon 40 catalog numbers span exactly 1000–1499 and
-  Polyneon 1500–1999/2000s — no overlap, which makes line membership unambiguous.
+  Polyneon 1500–1999/2000s — no overlap except a single shared number (1145; see
+  Step 3), so line membership is near-unambiguous.
   EZ Stitch's "classic_40" chart is actually Polyneon (its own title page says so).
   The Madeira Metro chart appears to exist only as a physical card.
 
@@ -58,6 +59,35 @@ match_palette(design_colors, algorithm="ciede2000", strategy="greedy",
 - Hex string parsing, line filtering, top_n bounding
 - All palette strategy invariants (greedy count, constrained limit, cluster merging)
 - Integration: full-catalogue exact match, all four algorithms < 200 ms
+
+### Step 3 (2026-06-12): Validation Web UI
+
+FastAPI backend (`src/api.py`) + single-file vanilla-JS frontend (`web/index.html`).
+Run with `uv run uvicorn pocs.poc2_thread_catalogue.src.api:app --reload` → http://127.0.0.1:8000/.
+
+**Endpoints:** `/health`, `/api/meta` (lines/families/algorithms), `/api/match`
+(color → top-N per algorithm, with `algorithm=all` returning all four at once),
+`/api/catalogue` (family/line/`q` browse + search), `/api/catalogue/{number}`.
+The catalogue is injected via a FastAPI dependency so unit tests run against an
+inline fixture without the gitignored data file.
+
+**Frontend:** color picker + hex input → top-5 split swatches (input | thread)
+with ΔE badges color-coded by the < 1 / < 3.5 / < 7 acceptability bands;
+A/B/C/D/all algorithm toggle for side-by-side comparison; family-chip catalogue
+browser with line filter and number/name search. Clicking any catalogue tile
+re-matches on that thread's color — handy for sanity-checking that a thread
+matches itself at ΔE 0.
+
+**Test coverage:** 17 new tests (71 total) in `tests/test_api.py` + `tests/test_webui.py`:
+endpoint contracts and validation errors against the inline fixture; full-catalogue
+spot-checks (e.g. #C8102E → 1637 under CIEDE2000); Playwright chromium smoke tests
+asserting the page renders, matches, and filters with zero JS errors.
+
+**Data finding:** the "no catalog-number overlap between lines" observation from
+Step 1 has exactly one exception — **1145** is both Classic Rayon "Coffee Bean"
+(`#5e3e35`) and an unnamed Polyneon (`#6c6b7b`). Lookups therefore key on
+(catalog_number, rgb) and the single-number endpoint returns all matches with an
+optional `line` disambiguator.
 
 ---
 
