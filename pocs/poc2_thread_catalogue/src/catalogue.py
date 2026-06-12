@@ -97,9 +97,28 @@ def color_family(rgb: tuple[int, int, int], lab: tuple[float, float, float]) -> 
 
 
 def build() -> dict:
-    """Parse every source, merge, reconcile, convert, classify."""
-    parsed = {name: fn() for name, fn in sources.ALL_PARSERS.items()}
-    names = sources.parse_official_names()
+    """Parse every source, merge, reconcile, convert, classify.
+
+    Sources whose data files are absent (gitignored) are skipped with a
+    warning rather than raising — allows the catalogue to be built from
+    whatever subset of sources is available (e.g. GPL-only in a sandbox
+    where the Madeira PDFs are network-blocked).
+    """
+    parsed: dict[str, list] = {}
+    for name, fn in sources.ALL_PARSERS.items():
+        try:
+            parsed[name] = fn()
+        except (FileNotFoundError, OSError) as exc:
+            import warnings
+
+            warnings.warn(f"Skipping source {name!r}: {exc}", stacklevel=2)
+    try:
+        names = sources.parse_official_names()
+    except (FileNotFoundError, OSError) as exc:
+        import warnings
+
+        warnings.warn(f"Skipping official names: {exc}", stacklevel=2)
+        names = {}
 
     # catalog -> {source: entry}
     by_code: dict[tuple[str, str], dict[str, dict]] = {}
