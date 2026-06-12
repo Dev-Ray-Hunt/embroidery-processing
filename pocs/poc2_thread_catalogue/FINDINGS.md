@@ -65,14 +65,16 @@ match_palette(design_colors, algorithm="ciede2000", strategy="greedy",
 
 ### Matching speed (all algorithms)
 
-| Algorithm | Median latency (706 threads, cloud sandbox) |
-|-----------|---------------------------------------------|
-| A: CIEDE2000 | ~1.4 ms ✓ |
-| B: CIE76 | ~0.8 ms ✓ |
-| C: RGB Euclidean | ~0.9 ms ✓ |
-| D: CMC l:c 2:1 | ~1.0 ms ✓ |
+| Algorithm | Median latency (823 threads, full catalogue) |
+|-----------|----------------------------------------------|
+| A: CIEDE2000 | 0.46 ms ✓ |
+| B: CIE76 | 0.33 ms ✓ |
+| C: RGB Euclidean | 0.32 ms ✓ |
+| D: CMC l:c 2:1 | 0.37 ms ✓ |
 
-**All four algorithms are well under the 200 ms bar** (50–200× faster in practice).
+**All four algorithms are ~400–600× under the 200 ms bar.** (Numbers re-measured
+locally against the full 823-thread catalogue; the cloud sandbox originally
+measured against a reduced 706-thread build.)
 
 ### CIEDE2000 quality of top-1 match across 50 random colors (seed=42)
 
@@ -81,10 +83,14 @@ for a fair cross-algorithm comparison.
 
 | Algorithm | Mean ΔE₂₀₀₀ | p90 ΔE₂₀₀₀ | % within 3.5 |
 |-----------|------------|-----------|--------------|
-| A: CIEDE2000 | 5.48 | 10.51 | 24% |
-| B: CIE76 | 6.64 | 14.34 | 22% |
-| C: RGB Euclidean | 7.20 | 13.70 | 16% |
-| D: CMC l:c 2:1 | 6.51 | 13.64 | 22% |
+| A: CIEDE2000 | 5.16 | 10.25 | 34% |
+| B: CIE76 | 6.07 | 12.03 | 26% |
+| C: RGB Euclidean | 6.79 | 14.35 | 26% |
+| D: CMC l:c 2:1 | 5.94 | 12.03 | 28% |
+
+(Full 823-thread catalogue. The extra 117 threads over the sandbox build
+improved every algorithm's hit rate — CIEDE2000's within-3.5 went 24%→34% —
+direct evidence that catalogue completeness drives match quality.)
 
 **The "90% within ΔE < 3.5" pass criterion is not met by any algorithm on random
 colors.** This is expected — random colors include vivid neons, saturated colors, and
@@ -95,12 +101,15 @@ logo colors are within that range of their best match.
 
 ### Algorithm agreement (top-1, 50 random colors)
 
-- All four algorithms agree on top-1: **24%** of random colors
-- A (CIEDE2000) vs D (CMC l:c 2:1): **64%** — the two Lab-based algorithms
-  designed for perceptual accuracy agree most often
-- A (CIEDE2000) vs B (CIE76): **50%**
-- A (CIEDE2000) vs C (RGB): **36%** — RGB diverges most from the perceptual metrics
-- B (CIE76) vs D (CMC): **74%** — surprisingly high given they use different formulas
+- All four algorithms agree on top-1: **18%** of random colors
+- B (CIE76) vs D (CMC l:c 2:1): **60%** — the closest pair
+- A (CIEDE2000) vs D (CMC l:c 2:1): **48%**
+- A (CIEDE2000) vs B (CIE76): **42%**
+- A (CIEDE2000) vs C (RGB): **38%**; C vs D: **26%** — RGB diverges most from
+  the perceptual metrics
+- Agreement DROPPED vs the sandbox run (all-four was 24% there): a denser
+  catalogue creates more near-tie candidates, so algorithm choice matters
+  MORE as the catalogue grows, not less.
 
 Full benchmark: `outputs/poc2/matching_benchmark.md`
 

@@ -14,12 +14,14 @@ Run with: uv run python scripts/benchmark_matching.py
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 CATALOGUE_PATH = REPO_ROOT / "outputs" / "poc2" / "madeira_catalogue.json"
 OUT_PATH = REPO_ROOT / "outputs" / "poc2" / "matching_benchmark.md"
 
