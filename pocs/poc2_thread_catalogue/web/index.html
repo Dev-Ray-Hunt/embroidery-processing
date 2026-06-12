@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Madeira Thread Match — POC 2 Step 3</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1f2329; --panel2: #262b33; --text: #e8eaed;
+    --muted: #9aa3ad; --accent: #4d9fff; --border: #343a44;
+    --de-great: #2ecc71; --de-good: #a3d34e; --de-ok: #f0a832; --de-poor: #e8554d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  input[type="color"] { width: 64px; height: 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); padding: 2px; cursor: pointer; }
+  input[type="text"] {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-size: 15px; font-family: ui-monospace, monospace;
+  }
+  #hex { width: 110px; }
+  select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 8px; font-size: 14px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    background: var(--panel2); color: var(--muted); border: none; padding: 10px 13px;
+    font-size: 13px; cursor: pointer; border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .err { color: var(--de-poor); font-size: 13px; min-height: 18px; margin-top: 8px; }
+  .cols { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  .algo-col h3 { font-size: 14px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .card {
+    display: flex; align-items: center; gap: 10px; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-bottom: 8px;
+  }
+  .swatch { display: flex; width: 84px; height: 48px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); flex: none; }
+  .swatch div { flex: 1; }
+  .card .info { min-width: 0; }
+  .card .name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .meta { color: var(--muted); font-size: 12px; }
+  .de { margin-left: auto; flex: none; font: 600 13px ui-monospace, monospace; padding: 4px 8px; border-radius: 6px; color: #16181d; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .chip {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 16px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+  }
+  .chip.active { border-color: var(--accent); color: var(--text); }
+  .chip .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; border: 1px solid #0006; }
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .tile {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; cursor: pointer; text-align: left; padding: 0; color: var(--text);
+  }
+  .tile:hover { border-color: var(--accent); }
+  .tile .tswatch { height: 44px; }
+  .tile .tinfo { padding: 6px 8px; font-size: 12px; }
+  .tile .tname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .tmeta { color: var(--muted); }
+  .count { color: var(--muted); font-size: 13px; margin-left: 8px; }
+  .legend { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .legend span { padding: 1px 7px; border-radius: 5px; color: #16181d; font-weight: 600; margin: 0 2px; }
+  #search { width: 240px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Madeira Thread Match</h1>
+  <p class="sub">POC 2 Step 3 — validation UI. Pick a color, compare the four matching algorithms, browse the catalogue.</p>
+
+  <div class="panel">
+    <div class="row">
+      <input type="color" id="picker" value="#c8102e" aria-label="color picker">
+      <input type="text" id="hex" value="#c8102e" spellcheck="false" aria-label="hex color">
+      <span class="seg" id="algoSeg"></span>
+      <select id="line" aria-label="thread line">
+        <option value="">All lines</option>
+        <option>Classic Rayon 40</option>
+        <option>Polyneon 40</option>
+      </select>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="cols" id="results"></div>
+    <div class="legend">Each swatch: input color (left) | thread color (right). ΔE badge:
+      <span style="background:var(--de-great)">&lt; 1 excellent</span>
+      <span style="background:var(--de-good)">&lt; 3.5 good</span>
+      <span style="background:var(--de-ok)">&lt; 7 fair</span>
+      <span style="background:var(--de-poor)">≥ 7 poor</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <strong>Catalogue browser</strong>
+      <input type="text" id="search" placeholder="Search number or name…" aria-label="search catalogue">
+      <span class="count" id="count"></span>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const HEX_RE = /^#?[0-9a-fA-F]{6}$/;
+const FAMILY_DOTS = {
+  white: "#f2f2f2", yellow: "#ffd23f", orange: "#f3702a", red: "#cc2233",
+  pink: "#ee6fa8", purple: "#7d3fc1", blue: "#2f5fc4", green: "#2c9a4b",
+  brown: "#8a5a33", neutral: "#9b9486", black: "#222222",
+};
+
+let state = { algorithm: "all", family: "", meta: null };
+
+function normHex(v) { return "#" + v.trim().replace(/^#/, "").toLowerCase(); }
+
+function deClass(de) {
+  if (de < 1) return "var(--de-great)";
+  if (de < 3.5) return "var(--de-good)";
+  if (de < 7) return "var(--de-ok)";
+  return "var(--de-poor)";
+}
+
+function matchCard(inputHex, m) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="swatch"><div></div><div></div></div>
+    <div class="info">
+      <div class="name"></div>
+      <div class="meta"></div>
+    </div>
+    <div class="de"></div>`;
+  const [left, right] = card.querySelectorAll(".swatch div");
+  left.style.background = inputHex;
+  right.style.background = m.hex;
+  card.querySelector(".name").textContent = `${m.catalog_number} — ${m.color_name ?? "(unnamed)"}`;
+  card.querySelector(".meta").textContent = `${m.line} · ${m.hex}${m.conflict ? " · ⚠ conflict-flagged" : ""}`;
+  const de = card.querySelector(".de");
+  de.textContent = "ΔE " + m.delta_e.toFixed(2);
+  de.style.background = deClass(m.delta_e);
+  return card;
+}
+
+function renderResults(data) {
+  const root = $("results");
+  root.replaceChildren();
+  const blocks = data.algorithm === "all"
+    ? Object.entries(data.results)
+    : [[data.algorithm, data.matches]];
+  for (const [algo, matches] of blocks) {
+    const col = document.createElement("div");
+    col.className = "algo-col";
+    const h = document.createElement("h3");
+    h.textContent = state.meta?.algorithms?.[algo] ?? algo;
+    col.appendChild(h);
+    for (const m of matches) col.appendChild(matchCard(data.input.hex, m));
+    root.appendChild(col);
+  }
+}
+
+async function runMatch() {
+  const raw = $("hex").value;
+  if (!HEX_RE.test(raw)) { $("err").textContent = "Enter a 6-digit hex color, e.g. #c8102e"; return; }
+  $("err").textContent = "";
+  const hex = normHex(raw);
+  $("picker").value = hex;
+  const params = new URLSearchParams({ color: hex.slice(1), algorithm: state.algorithm, top_n: "5" });
+  if ($("line").value) params.set("line", $("line").value);
+  const res = await fetch("/api/match?" + params);
+  if (!res.ok) { $("err").textContent = (await res.json()).detail ?? "Match failed"; return; }
+  renderResults(await res.json());
+}
+
+function buildAlgoSeg() {
+  const seg = $("algoSeg");
+  const options = [["all", "All"], ...Object.entries(state.meta.algorithms)];
+  for (const [value, label] of options) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.dataset.value = value;
+    if (value === state.algorithm) b.classList.add("active");
+    b.addEventListener("click", () => {
+      state.algorithm = value;
+      seg.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      runMatch();
+    });
+    seg.appendChild(b);
+  }
+}
+
+function buildChips() {
+  const chips = $("chips");
+  const families = [["", `All (${state.meta.total})`], ...Object.entries(state.meta.families)
+    .map(([f, n]) => [f, `${f} (${n})`])];
+  for (const [value, label] of families) {
+    const c = document.createElement("button");
+    c.className = "chip" + (value === state.family ? " active" : "");
+    c.dataset.value = value;
+    if (value) {
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = FAMILY_DOTS[value] ?? "#888";
+      c.appendChild(dot);
+    }
+    c.appendChild(document.createTextNode(label));
+    c.addEventListener("click", () => {
+      state.family = value;
+      chips.querySelectorAll(".chip").forEach((x) => x.classList.toggle("active", x === c));
+      loadCatalogue();
+    });
+    chips.appendChild(c);
+  }
+}
+
+async function loadCatalogue() {
+  const params = new URLSearchParams();
+  if (state.family) params.set("family", state.family);
+  if ($("search").value.trim()) params.set("q", $("search").value.trim());
+  if ($("line").value) params.set("line", $("line").value);
+  const res = await fetch("/api/catalogue?" + params);
+  if (!res.ok) return;
+  const data = await res.json();
+  $("count").textContent = `${data.count} threads`;
+  const grid = $("grid");
+  grid.replaceChildren();
+  for (const t of data.threads) {
+    const tile = document.createElement("button");
+    tile.className = "tile";
+    tile.title = "Click to match this color";
+    tile.innerHTML = `<div class="tswatch"></div>
+      <div class="tinfo"><div class="tname"></div><div class="tmeta"></div></div>`;
+    tile.querySelector(".tswatch").style.background = t.hex;
+    tile.querySelector(".tname").textContent = `${t.catalog_number} ${t.color_name ?? ""}`;
+    tile.querySelector(".tmeta").textContent = t.line;
+    tile.addEventListener("click", () => {
+      $("hex").value = t.hex;
+      runMatch();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    grid.appendChild(tile);
+  }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+async function init() {
+  const res = await fetch("/api/meta");
+  if (!res.ok) {
+    $("err").textContent = (await res.json()).detail ?? "Catalogue unavailable";
+    return;
+  }
+  state.meta = await res.json();
+  buildAlgoSeg();
+  buildChips();
+  $("picker").addEventListener("input", (e) => { $("hex").value = e.target.value; runMatch(); });
+  $("hex").addEventListener("input", debounce(runMatch, 300));
+  $("line").addEventListener("change", () => { runMatch(); loadCatalogue(); });
+  $("search").addEventListener("input", debounce(loadCatalogue, 250));
+  await runMatch();
+  await loadCatalogue();
+}
+init();
+</script>
+</body>
+</html>
