@@ -146,7 +146,7 @@ _(R=Reliability, Q=Quality, S=Speed, F=Flexibility — builder-estimated, provis
 - CIEDE2000 and CMC l:c 2:1 agree 64% of the time, suggesting both are using perceptually
   appropriate weighting. RGB diverges the most (36% agreement with CIEDE2000).
 - CIE76 is the simplest implementation and still achieves 50% agreement with CIEDE2000.
-  For a 706-thread catalogue, the extra complexity of CIEDE2000 is affordable.
+  For an 823-thread catalogue, the extra complexity of CIEDE2000 is affordable.
 - The "90% within 3.5" pass criterion is tight for random colors but should be achievable
   for real-world logo color testing. This needs validation against actual Straight Down logos.
 
@@ -154,8 +154,8 @@ _(R=Reliability, Q=Quality, S=Speed, F=Flexibility — builder-estimated, provis
 - Without physical spool validation (Task 3), all ΔE estimates are screen-color
   approximations — the true perceptual accuracy of thread matches against physical spools
   is unknown.
-- The 706-thread sandbox catalogue (vs 823 expected with full sources) means some edge-case
-  threads may be missing. This affects benchmark numbers slightly.
+- The original cloud-sandbox benchmark ran against a reduced 706-thread build; the local
+  rebuild has the full 823 threads and the numbers above were re-measured against it.
 
 **Surprising finding:** CMC l:c 2:1 (the textile-specific standard) does not clearly beat
 CIEDE2000 on this dataset — they agree 64% of the time, and CIEDE2000 produces slightly
@@ -189,10 +189,9 @@ real-logo color testing (Task 4).
 - **Real-logo color testing (Task 4):** 50-color test against actual Straight Down
   customer logos, not random colors. This is where the "90% within 3.5" pass
   criterion should be re-evaluated.
-- **Madeira PDF sources:** The sandbox network blocked madeira.com (HTTP 403 "host
-  not allowed"). Full production catalogue (823 threads) requires re-fetching the
-  PDFs from a machine with full network access; the Ink/Stitch GPL fallback gives
-  706 threads but misses some Madeira-specific RGB corrections.
+- **Madeira PDF sources (resolved locally):** Cloud sandboxes block madeira.com
+  (HTTP 403 "host not allowed") and fall back to the 706-thread Ink/Stitch GPL build;
+  the local rebuild fetched the PDFs and has the full 823 threads.
 - **Isacord cross-reference (Task 2):** The Isacord palette is downloaded but an
   equivalence table (which Isacord ≈ which Madeira) still needs a source.
 - **Step 3 (Web UI):** Color picker → top-5 swatches with ΔE per algorithm.

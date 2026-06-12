@@ -3,11 +3,11 @@
 Steps 1 (catalogue build) and 2 (color matching engine) are **done**.
 
 ```bash
-# Rebuild catalogue (~706 threads from GPL sources; 823 with full PDF access)
+# Rebuild catalogue (full 823 threads with network access; 706 from GPL sources only)
 uv run python -m pocs.poc2_thread_catalogue.src.catalogue
 # -> outputs/poc2/madeira_catalogue.json
 
-# Run matching engine tests (44 tests, no data files required for unit layer)
+# Run matching engine tests (54 tests, no data files required for unit layer)
 uv run pytest pocs/poc2_thread_catalogue/ -q
 
 # Run benchmark (requires built catalogue)
@@ -61,7 +61,6 @@ Physical validation + real-logo testing:
 - **Spool photos** (10 spools, protocol written) — needs Brandon on-site.
 - **Isacord↔Madeira equivalence table** — the Isacord RGB palette is downloaded;
   an equivalence table (which Isacord ≈ which Madeira) still needs a source.
-- **Full PDF catalogue** — the Madeira shade-card PDFs are network-blocked in this
-  sandbox (madeira.com returns 403 "host_not_allowed"); re-fetch manually from a
-  machine with full network access and rebuild to get 823 threads instead of 706.
-  The one-shot script is in `data/README.md` (section "madeira_sources").
+
+Resolved: the full 823-thread catalogue is now built locally (Madeira PDFs are
+only blocked in cloud sandboxes; rebuild there falls back to 706 GPL threads).

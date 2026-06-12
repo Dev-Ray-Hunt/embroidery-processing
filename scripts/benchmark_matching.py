@@ -173,9 +173,13 @@ def write_markdown(result: dict) -> None:
     lines = [
         "# POC 2 — Color Matching Engine Benchmark",
         "",
-        f"Catalogue: **{result['n_threads']} threads** "
-        "(Ink/Stitch GPL sources; Madeira PDFs network-blocked in sandbox — "
-        "full 823-thread catalogue expected in production).",
+        f"Catalogue: **{result['n_threads']} threads**"
+        + (
+            ""
+            if result["n_threads"] >= 823
+            else " (partial build — Ink/Stitch GPL sources only; full catalogue is 823 threads)"
+        )
+        + ".",
         "",
         f"Random colors: **{result['n_random']}** (RNG seed {result['rng_seed']}).",
         "",
@@ -242,9 +246,7 @@ def write_markdown(result: dict) -> None:
         "",
         "## Notes",
         "",
-        "- Sandbox network policy blocked madeira.com/madeirausa.com (HTTP 403); "
-        "catalogue built from Ink/Stitch GPL sources only (706 threads vs 823 expected).",
-        "- Latency measured on a remote cloud container; times will differ on local hardware.",
+        "- Latency varies with hardware; the < 200 ms target leaves ample headroom either way.",
         "- CMC configured for textile acceptability (l=2, c=1).",
         "- Random test colors include values that likely have no close thread match "
         "(e.g. saturated neons); real-logo colors would score higher.",
