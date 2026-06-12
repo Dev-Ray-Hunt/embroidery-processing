@@ -35,7 +35,10 @@ uv run ruff check .            # lint
 uv run ruff format .           # format
 ```
 
-Renderer C needs the system Cairo library: `brew install cairo pkg-config`.
+Renderer C needs the system Cairo library:
+
+- macOS: `brew install cairo pkg-config`
+- Debian/Ubuntu: `sudo apt-get install libcairo2-dev pkg-config`
 
 ## Test data
 
