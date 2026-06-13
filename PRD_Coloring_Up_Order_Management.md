@@ -28,6 +28,66 @@ This document defines the requirements for building a **Coloring Up order manage
 
 ---
 
+## Workflow Confirmation & Refinements (2026-06-12)
+
+> **This section supersedes any conflicting statement below it.** It captures decisions locked in a workflow-confirmation session. Where the older text below assumes order-level status, a per-order trim sheet, or Wilcom PDF parsing, **this section wins.**
+
+### Assembled state machine (per line item)
+
+```
+New ─► Awaiting Logo ─►[logo linked via NetSuite file-cabinet id, or triage]
+                          │
+              ┌───────────┴────────────┐
+       exact logo+style+color      no match
+         match exists                  │
+              │                  Color-Up In Progress  ◄──────────┐
+              │                    (self-serve pool;               │
+              │                  (optional) Internal Review        │
+              │                   ─ configurable gate ─            │
+              │                        │                           │
+              │                  Needs Approver? ─► add inline     │
+              │                        │                           │
+              │                 Sent for Approval                  │
+              │                  (hosted page; daily               │
+              │                   reminder × up to 5)              │
+              │                   ┌────┴─────┐                     │
+              │              (5 unanswered)  │                     │
+              │               Phone Call     │                     │
+              │                   │     ┌────┴────┐                │
+              │                   └────►│         │                │
+              │                  Approved      Changes Requested ──┘
+              │              (cascades to       (comment) ─► Revision
+              │               all lines using    In Progress (honors gate,
+              │               this color-up)     new immutable version)
+              │                        │
+              └────────────────────────┤
+                                        ▼
+                            Production Approval  (production-side gate —
+                                        │         even zero customer-touch repeats)
+                                  Production Ready ──► In Production ──► Complete
+```
+
+### Decisions that supersede the older text
+
+1. **Status grain = line item**, not order. The order header shows a rollup summary ("3 of 4 ready, 1 awaiting approval"). Rationale: Straight Down partially ships and rush-pulls complete work.
+2. **Color-up match key = `logo + style_number + color_code`, exact match only.** A color code (e.g. MAL) is not physically consistent across styles, so all three must match to reuse an approved color-up.
+3. **Approval grain = the color-up proof.** Customer approves/comments per color-up; approval cascades to every line item referencing it; sizes collapse into the group.
+4. **Repeat / exact-match lines skip _customer_ approval but still pass a _production_ approval gate** before the floor (zero customer-touch, not zero-touch). A manual "send for approval anyway" override exists.
+5. **Trim Sheet = a Production Batch** — an on-demand view (not a persisted object), keyed on `logo + placement + thread choices`, approved-only, never crossing customers. Operator works by Order # and decides grouping at the queue. **This replaces the per-order trim sheet described in Module 4.**
+6. **Internal Review = configurable gate** (customer-level default + order-level override). Revisions honor the same setting.
+7. **Proof delivery:** email → hosted approval page; approver selects their name from the customer's approver list; any listed approver can act, system records who. A customer **comment always bounces the proof to revision** (team may proxy-approve trivial comments — audit records it as team-proxy). Color-up versions are immutable and loadable per round.
+8. **Reminders:** automated daily morning email until approved, capped at 5, then escalates to `Phone Call` status. One digest per customer per morning.
+9. **Intake = satellite model.** This system references the NetSuite SO and owns logos / color-ups / approvals / batches. CSV/paste mass-import for orders. Logo identified via the **NetSuite file-cabinet logo id** (the Logo's external key); unknown → `Awaiting Logo` triage. DSTs have two entry points: added to an order then promoted to the customer library, or added directly to the library.
+10. **Design technical data comes from the DST parse (POC 1), NOT Wilcom PDF parsing.** Stabilizer / runtime / machine-format become optional manual fields on the Logo. **This supersedes the Wilcom worksheet parsing in Module 4 and Module 1C.**
+
+### New states added beyond the original docs
+`Awaiting Logo` (no logo linked yet), `Phone Call` (5 unanswered reminders), `Needs Approver` (send-for-approval with no approver on file).
+
+### Still open
+End-to-end data sourcing / live NetSuite–VRLink boundary (TBD); whether non-DST production fields are hard must-haves.
+
+---
+
 ## Core Workflow
 
 The system supports the following end-to-end workflow:
@@ -158,7 +218,7 @@ Customer
 | `customer_id` | FK → Customer | Which customer placed this order |
 | `netsuite_order_number` | String (optional) | Link to NetSuite SO |
 | `customer_po` | String | Customer PO number |
-| `status` | Enum | See workflow states above |
+| `status` | Enum | **Superseded:** status now lives on the line item; the order shows a rollup summary. See Workflow Confirmation (2026-06-12). |
 | `priority` | Enum | Normal, Rush |
 | `assigned_to` | String | Team member doing the color-up |
 | `order_date` | Date | When the order was placed |
@@ -180,6 +240,7 @@ Customer
 | `logo_id` | FK → Logo | Which logo is being embroidered on this line item |
 | `colorup_id` | FK → Color-Up (optional) | Which approved color-up to use — null if new color-up needed |
 | `placement` | Enum | Left Chest, Cap Front, Right Sleeve, etc. |
+| `status` | Enum | **Added (2026-06-12):** workflow status lives here, per line item. States incl. Awaiting Logo, Color-Up In Progress, Internal Review, Needs Approver, Sent for Approval, Phone Call, Approved, Revision In Progress, Production Ready, In Production, Complete. |
 
 Note: Multiple line items can share the same logo and color-up (e.g., five different black garment styles all getting the same logo in the same colors). Line items can also have different logos (e.g., a left chest logo and a separate sleeve logo would be separate line item groupings).
 
@@ -268,6 +329,8 @@ Generates a visual proof document showing the customer what their embroidery wil
 ## Module 4: Trim Sheet Generation
 
 ### What It Does
+
+> **Superseded grain (2026-06-12):** the Trim Sheet is a **Production Batch** — an on-demand view keyed on `logo + placement + thread choices`, approved-only, never crossing customers — not a per-order document. See Workflow Confirmation. Also: design technical data is sourced from the **DST parse (POC 1)**, not the Wilcom PDF parser described below; treat the Wilcom-parsing requirements here as out of scope.
 
 Generates a consolidated **Trim Sheet** — the single production document that operators use on the floor. Today this information lives across two separate documents: a Wilcom Production Worksheet (design technical specs) and a Compact Trim Sheet from the existing system (order details, garment breakdown, thread sequence). This module combines both into one unified, printable document.
 
