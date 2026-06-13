@@ -24,6 +24,31 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
+from pocs.poc4_order_workflow.src.state_machine import Status, transition
+
+
+def production_approve(
+    conn: sqlite3.Connection,
+    line_item_id: int,
+    actor: str,
+    *,
+    notes: str | None = None,
+) -> None:
+    """Production-side gate sign-off: Pending Production Approval -> Production Ready.
+
+    This is the explicit production approval required before a line item can
+    run — for both customer-approved items and exact-match repeats that skipped
+    the customer. Raises InvalidTransitionError if the item is not currently in
+    Pending Production Approval.
+    """
+    transition(
+        conn,
+        line_item_id,
+        Status.PRODUCTION_READY,
+        actor,
+        notes=notes or "Production approval",
+    )
+
 
 @dataclass
 class ProductionBatch:

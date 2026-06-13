@@ -161,7 +161,8 @@ def test_cascade_approval_advances_sent_for_approval(db, customer, logo, order, 
     assert set(advanced) == {li1.line_item_id, li2.line_item_id}
     for lid in [li1.line_item_id, li2.line_item_id]:
         row = crud.get_line_item(db, lid)
-        assert row["status"] == "Production Ready"
+        # Cascade stops at the production gate, not Production Ready.
+        assert row["status"] == "Pending Production Approval"
 
     cu_row = crud.get_color_up(db, cu.colorup_id)
     assert cu_row["status"] == "Approved"
@@ -193,7 +194,7 @@ def test_cascade_approval_phone_call_items(db, customer, logo, order, approver):
     advanced = cascade_approval(db, cu.colorup_id, actor="lead", team_proxy=True)
     assert li.line_item_id in advanced
     row = crud.get_line_item(db, li.line_item_id)
-    assert row["status"] == "Production Ready"
+    assert row["status"] == "Pending Production Approval"
 
 
 def test_cascade_skips_already_advanced_items(db, customer, logo, order):
@@ -223,6 +224,76 @@ def test_cascade_skips_already_advanced_items(db, customer, logo, order):
     # Already at Production Ready — not in the returned list
     assert li.line_item_id not in advanced
     # Status unchanged
+    assert crud.get_line_item(db, li.line_item_id)["status"] == "Production Ready"
+
+
+def test_cascade_leaves_needs_approver_untouched(db, customer, logo, order):
+    """A Needs Approver line was never sent — the cascade must skip it, not crash.
+
+    Regression for the bug where Needs Approver was in the cascade set but the
+    state machine forbids Needs Approver -> Approved.
+    """
+    cu = crud.create_color_up(
+        db,
+        ColorUp(
+            logo_id=logo.logo_id,
+            style_number="S",
+            color_code="C",
+            thread_sequence=[],
+            status="Pending Approval",
+        ),
+    )
+    sent = crud.create_line_item(
+        db,
+        OrderLineItem(
+            order_id=order.order_id,
+            style_number="S",
+            color_code="C",
+            placement="Left Chest",
+            logo_id=logo.logo_id,
+            colorup_id=cu.colorup_id,
+            status=Status.SENT_FOR_APPROVAL.value,
+        ),
+    )
+    needs_approver = crud.create_line_item(
+        db,
+        OrderLineItem(
+            order_id=order.order_id,
+            style_number="S",
+            color_code="C",
+            placement="Right Sleeve",
+            logo_id=logo.logo_id,
+            colorup_id=cu.colorup_id,
+            status=Status.NEEDS_APPROVER.value,
+        ),
+    )
+
+    advanced = cascade_approval(db, cu.colorup_id, actor="customer")
+
+    # Sent item advances to the production gate; Needs Approver item is untouched.
+    assert advanced == [sent.line_item_id]
+    assert crud.get_line_item(db, sent.line_item_id)["status"] == "Pending Production Approval"
+    assert crud.get_line_item(db, needs_approver.line_item_id)["status"] == "Needs Approver"
+
+
+def test_production_approve_clears_the_gate(db, order, logo, approved_color_up):
+    """production_approve advances Pending Production Approval -> Production Ready."""
+    from pocs.poc4_order_workflow.src.production import production_approve
+
+    li = crud.create_line_item(
+        db,
+        OrderLineItem(
+            order_id=order.order_id,
+            style_number="14728-BLK",
+            color_code="BLK",
+            placement="Left Chest",
+            status=Status.AWAITING_LOGO.value,
+        ),
+    )
+    resolve_logo_for_line_item(db, li.line_item_id, logo.logo_id, actor="system")
+    assert crud.get_line_item(db, li.line_item_id)["status"] == "Pending Production Approval"
+
+    production_approve(db, li.line_item_id, actor="production-lead")
     assert crud.get_line_item(db, li.line_item_id)["status"] == "Production Ready"
 
 
@@ -285,7 +356,7 @@ def test_cascade_does_not_cross_customers(db):
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_logo_exact_match_goes_to_production_ready(db, order, logo, approved_color_up):
+def test_resolve_logo_exact_match_goes_to_production_gate(db, order, logo, approved_color_up):
     li = crud.create_line_item(
         db,
         OrderLineItem(
@@ -297,7 +368,8 @@ def test_resolve_logo_exact_match_goes_to_production_ready(db, order, logo, appr
         ),
     )
     result = resolve_logo_for_line_item(db, li.line_item_id, logo.logo_id, actor="system")
-    assert result == Status.PRODUCTION_READY.value
+    # Exact match skips the customer but still lands at the production gate.
+    assert result == Status.PENDING_PRODUCTION_APPROVAL.value
     row = crud.get_line_item(db, li.line_item_id)
     assert row["logo_id"] == logo.logo_id
     assert row["colorup_id"] == approved_color_up.colorup_id

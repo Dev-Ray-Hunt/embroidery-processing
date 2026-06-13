@@ -8,9 +8,10 @@ garment styles, so all three fields must match to reuse an approved color-up.
 Approval cascade
 ----------------
 When a color-up is approved, every line item that references it and is in
-an approval-pending state advances to Production Ready.  The cascade also
-handles the "send_for_approval_override" flag: a line item that reached
-Production Ready via an exact match will still respect the production gate.
+an approval-pending state advances to Pending Production Approval — the
+production-side gate — NOT straight to Production Ready.  A line item in
+Needs Approver was never sent to the customer, so it is deliberately left
+out of the cascade (it stays put until an approver is added and it is sent).
 """
 
 from __future__ import annotations
@@ -63,10 +64,11 @@ def find_any_color_up(
 
 
 # Status values that the cascade should advance when a color-up is approved.
+# Needs Approver is intentionally excluded: those line items were never sent
+# to the customer, and the state machine forbids Needs Approver -> Approved.
 _CASCADE_FROM_STATUSES = {
     Status.SENT_FOR_APPROVAL.value,
     Status.PHONE_CALL.value,
-    Status.NEEDS_APPROVER.value,
 }
 
 
@@ -82,8 +84,10 @@ def cascade_approval(
 ) -> list[int]:
     """Mark the color-up Approved and advance all qualifying line items.
 
-    Line items that reference *colorup_id* and are in Sent for Approval,
-    Phone Call, or Needs Approver are moved to Production Ready.
+    Line items that reference *colorup_id* and are in Sent for Approval or
+    Phone Call are moved to Pending Production Approval (the production gate).
+    They do NOT skip to Production Ready — a production sign-off is still
+    required (see production.production_approve).
 
     Returns the list of line_item_ids that were advanced.
     """
@@ -109,9 +113,16 @@ def cascade_approval(
     advanced: list[int] = []
     for row in rows:
         lid = row["line_item_id"]
-        # Each item passes through Approved → Production Ready
+        # Each item passes through Approved → Pending Production Approval and
+        # stops there; production must sign off before it becomes runnable.
         transition(conn, lid, Status.APPROVED, actor, notes=notes, team_proxy=team_proxy)
-        transition(conn, lid, Status.PRODUCTION_READY, actor, notes="Production gate sign-off")
+        transition(
+            conn,
+            lid,
+            Status.PENDING_PRODUCTION_APPROVAL,
+            actor,
+            notes="Customer approved — awaiting production approval",
+        )
         advanced.append(lid)
 
     return advanced
@@ -131,7 +142,8 @@ def resolve_logo_for_line_item(
     1. Line item must currently be in Awaiting Logo.
     2. If an approved color-up exists for the match key AND
        send_for_approval_override is False AND force_approval is False:
-       → advance to Production Ready (exact-match fast path).
+       → advance to Pending Production Approval (exact-match fast path skips the
+         CUSTOMER but still passes the PRODUCTION gate before it can run).
     3. Otherwise → advance to Color-Up In Progress.
 
     Returns the resulting status string.
@@ -164,14 +176,21 @@ def resolve_logo_for_line_item(
     match = find_approved_color_up(conn, logo_id, row["style_number"], row["color_code"])
 
     if match and not override:
-        # Exact match — link the color-up and skip to Production Ready
+        # Exact match — link the color-up and route to the production gate
+        # (skips the customer, NOT the production sign-off).
         conn.execute(
             "UPDATE order_line_items SET colorup_id = ? WHERE line_item_id = ?",
             (match["colorup_id"], line_item_id),
         )
         conn.commit()
-        transition(conn, line_item_id, Status.PRODUCTION_READY, actor, notes="Exact match")
-        return Status.PRODUCTION_READY.value
+        transition(
+            conn,
+            line_item_id,
+            Status.PENDING_PRODUCTION_APPROVAL,
+            actor,
+            notes="Exact match — awaiting production approval",
+        )
+        return Status.PENDING_PRODUCTION_APPROVAL.value
     else:
         transition(conn, line_item_id, Status.COLOR_UP_IN_PROGRESS, actor, notes="No exact match")
         return Status.COLOR_UP_IN_PROGRESS.value

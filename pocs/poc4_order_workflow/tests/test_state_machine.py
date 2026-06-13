@@ -34,7 +34,7 @@ def test_valid_forward_transitions():
     valid_pairs = [
         (Status.NEW, Status.AWAITING_LOGO),
         (Status.AWAITING_LOGO, Status.COLOR_UP_IN_PROGRESS),
-        (Status.AWAITING_LOGO, Status.PRODUCTION_READY),
+        (Status.AWAITING_LOGO, Status.PENDING_PRODUCTION_APPROVAL),
         (Status.COLOR_UP_IN_PROGRESS, Status.INTERNAL_REVIEW),
         (Status.COLOR_UP_IN_PROGRESS, Status.NEEDS_APPROVER),
         (Status.COLOR_UP_IN_PROGRESS, Status.SENT_FOR_APPROVAL),
@@ -47,7 +47,8 @@ def test_valid_forward_transitions():
         (Status.SENT_FOR_APPROVAL, Status.REVISION_IN_PROGRESS),
         (Status.PHONE_CALL, Status.APPROVED),
         (Status.PHONE_CALL, Status.REVISION_IN_PROGRESS),
-        (Status.APPROVED, Status.PRODUCTION_READY),
+        (Status.APPROVED, Status.PENDING_PRODUCTION_APPROVAL),
+        (Status.PENDING_PRODUCTION_APPROVAL, Status.PRODUCTION_READY),
         (Status.REVISION_IN_PROGRESS, Status.COLOR_UP_IN_PROGRESS),
         (Status.PRODUCTION_READY, Status.IN_PRODUCTION),
         (Status.IN_PRODUCTION, Status.COMPLETE),
@@ -66,6 +67,9 @@ def test_invalid_transitions_raise():
         (Status.APPROVED, Status.SENT_FOR_APPROVAL),
         (Status.PRODUCTION_READY, Status.NEW),
         (Status.IN_PRODUCTION, Status.NEW),
+        # The production gate is mandatory: nothing skips straight to runnable.
+        (Status.AWAITING_LOGO, Status.PRODUCTION_READY),
+        (Status.APPROVED, Status.PRODUCTION_READY),
     ]
     for from_s, to_s in invalid_pairs:
         with pytest.raises(InvalidTransitionError):
@@ -151,7 +155,8 @@ def test_happy_path_full_workflow(db, customer, logo, approver):
         (Status.COLOR_UP_IN_PROGRESS, "artist"),
         (Status.SENT_FOR_APPROVAL, "artist"),
         (Status.APPROVED, "customer"),
-        (Status.PRODUCTION_READY, "lead"),
+        (Status.PENDING_PRODUCTION_APPROVAL, "lead"),
+        (Status.PRODUCTION_READY, "production"),
         (Status.IN_PRODUCTION, "operator"),
         (Status.COMPLETE, "operator"),
     ]
@@ -188,7 +193,8 @@ def test_revision_loop(db, customer, logo, approver):
         (Status.COLOR_UP_IN_PROGRESS, "artist"),  # second round
         (Status.SENT_FOR_APPROVAL, "artist"),
         (Status.APPROVED, "customer"),
-        (Status.PRODUCTION_READY, "lead"),
+        (Status.PENDING_PRODUCTION_APPROVAL, "lead"),
+        (Status.PRODUCTION_READY, "production"),
     ]:
         transition(db, lid, st, actor=actor)
 
@@ -216,7 +222,8 @@ def test_phone_call_path(db, customer, logo, approver):
         (Status.SENT_FOR_APPROVAL, "artist"),
         (Status.PHONE_CALL, "reminder-bot"),
         (Status.APPROVED, "lead"),
-        (Status.PRODUCTION_READY, "lead"),
+        (Status.PENDING_PRODUCTION_APPROVAL, "lead"),
+        (Status.PRODUCTION_READY, "production"),
     ]:
         transition(db, lid, st, actor=actor)
 

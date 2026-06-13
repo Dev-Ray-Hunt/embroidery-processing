@@ -1,9 +1,14 @@
 """Per-line-item state machine for the order workflow.
 
-States (12, per the NEXT.md build plan and task brief):
+States (13, per the NEXT.md build plan and task brief):
     New, Awaiting Logo, Color-Up In Progress, Internal Review,
     Needs Approver, Sent for Approval, Phone Call, Approved,
-    Revision In Progress, Production Ready, In Production, Complete
+    Revision In Progress, Pending Production Approval, Production Ready,
+    In Production, Complete
+
+Pending Production Approval is the production-side gate: a cleared line item
+(whether customer-approved OR an exact-match repeat that skipped the customer)
+waits here for an internal production sign-off before it is eligible to run.
 
 Every transition is validated and logged to status_history.
 """
@@ -25,6 +30,7 @@ class Status(str, Enum):
     PHONE_CALL = "Phone Call"
     APPROVED = "Approved"
     REVISION_IN_PROGRESS = "Revision In Progress"
+    PENDING_PRODUCTION_APPROVAL = "Pending Production Approval"
     PRODUCTION_READY = "Production Ready"
     IN_PRODUCTION = "In Production"
     COMPLETE = "Complete"
@@ -37,7 +43,9 @@ VALID_TRANSITIONS: dict[Status, set[Status]] = {
     Status.NEW: {Status.AWAITING_LOGO},
     Status.AWAITING_LOGO: {
         Status.COLOR_UP_IN_PROGRESS,  # no exact match found
-        Status.PRODUCTION_READY,  # exact match exists (skips customer approval)
+        # exact match exists: skips CUSTOMER approval but still needs the
+        # PRODUCTION approval gate before it can run
+        Status.PENDING_PRODUCTION_APPROVAL,
     },
     Status.COLOR_UP_IN_PROGRESS: {
         Status.INTERNAL_REVIEW,  # internal-review gate is on
@@ -62,10 +70,13 @@ VALID_TRANSITIONS: dict[Status, set[Status]] = {
         Status.REVISION_IN_PROGRESS,  # changes agreed on phone
     },
     Status.APPROVED: {
-        Status.PRODUCTION_READY,  # production gate sign-off
+        Status.PENDING_PRODUCTION_APPROVAL,  # customer-approved → production gate
     },
     Status.REVISION_IN_PROGRESS: {
         Status.COLOR_UP_IN_PROGRESS,  # new immutable version started
+    },
+    Status.PENDING_PRODUCTION_APPROVAL: {
+        Status.PRODUCTION_READY,  # production signs off → eligible to run
     },
     Status.PRODUCTION_READY: {
         Status.IN_PRODUCTION,
